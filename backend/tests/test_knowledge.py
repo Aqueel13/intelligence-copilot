@@ -213,6 +213,31 @@ def test_upload_markdown_document(client, cleanup_memo) -> None:
     assert hits[0]["doc_key"] == "MEMO-1"
 
 
+class _ProviderError(Exception):
+    status_code = 401
+
+
+class _FailingModel(FakeListChatModel):
+    def invoke(self, *args, **kwargs):
+        raise _ProviderError("Invalid API Key")
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [(401, "rejected the API key"), (429, "rate limit"), (404, "model was not found")],
+)
+def test_provider_errors_become_clear_502s(client, monkeypatch, status, expected) -> None:
+    from watchdog_backend.api import knowledge as api
+    from watchdog_backend.llm.gateway import ModelSpec
+
+    _ProviderError.status_code = status
+    model = _FailingModel(responses=["unused"])
+    monkeypatch.setattr(api, "get_chat_model", lambda role: (model, ModelSpec("groq", "x")))
+    r = client.post("/api/knowledge/ask", json={"question": "What is the QA target?"})
+    assert r.status_code == 502
+    assert "groq:x" in r.json()["detail"] and expected in r.json()["detail"]
+
+
 def test_upload_rejects_unsupported_type(client) -> None:
     r = client.post("/api/knowledge/documents", files={"file": ("x.exe", b"MZ", "application/x")})
     assert r.status_code == 422

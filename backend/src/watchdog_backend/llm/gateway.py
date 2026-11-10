@@ -22,6 +22,34 @@ class LLMConfigError(ValueError):
     pass
 
 
+class LLMCallError(RuntimeError):
+    """The provider failed (bad key, rate limit, timeout, unknown model, server down…)."""
+
+    def __init__(self, model_id: str, cause: BaseException) -> None:
+        self.model_id = model_id
+        self.reason = describe_provider_error(cause)
+        super().__init__(f"{model_id}: {self.reason}")
+
+
+def describe_provider_error(exc: BaseException) -> str:
+    """A short, user-facing reason. Provider SDK errors never include the API key."""
+    status = getattr(exc, "status_code", None) or getattr(
+        getattr(exc, "response", None), "status_code", None
+    )
+    hints = {
+        401: "the provider rejected the API key (check the key in .env)",
+        403: "the API key is not allowed to use this model",
+        404: "the model was not found (check the model name)",
+        429: "rate limit or free-tier quota reached; try again shortly or switch model",
+    }
+    if status in hints:
+        return hints[status]
+    if isinstance(exc, (ConnectionError, TimeoutError, OSError)) or "connect" in str(exc).lower():
+        return f"could not reach the model server ({type(exc).__name__})"
+    message = getattr(exc, "message", None) or str(exc)
+    return f"{type(exc).__name__}: {message[:200]}"
+
+
 @dataclass(frozen=True)
 class ModelSpec:
     provider: str

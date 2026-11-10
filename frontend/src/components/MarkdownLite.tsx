@@ -72,6 +72,11 @@ function Table({ lines }: { lines: string[] }) {
   )
 }
 
+/** Inline **bold** and *italic* only (for single sentences). */
+export function Inline({ text }: { text: string }) {
+  return <>{inline(text)}</>
+}
+
 function inline(text: string): ReactNode[] {
   // Split on **bold** and *italic* while keeping the delimiters' content.
   return text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g).map((part, i) => {

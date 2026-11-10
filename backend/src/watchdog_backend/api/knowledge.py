@@ -14,7 +14,7 @@ from watchdog_backend.knowledge.models import get_embedder, get_reranker
 from watchdog_backend.knowledge.parsing import UnsupportedDocument, parse_document
 from watchdog_backend.knowledge.retrieval import Method, RetrievedChunk, SearchFilters
 from watchdog_backend.knowledge.service import get_retriever
-from watchdog_backend.llm.gateway import LLMConfigError, get_chat_model
+from watchdog_backend.llm.gateway import LLMCallError, LLMConfigError, get_chat_model
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 DbSession = Annotated[Session, Depends(get_session)]
@@ -81,9 +81,10 @@ def ask(req: AskRequest, session: DbSession) -> Answer:
             session.connection(), get_retriever(), model, spec.id, req.question,
             get_reranker(), k=req.k, method=req.method, filters=req.filters,
         )  # fmt: skip
-    except (ConnectionError, TimeoutError, OSError) as exc:
+    except LLMCallError as exc:
+        # 502: the upstream model provider failed, not this service.
         raise HTTPException(
-            status_code=503, detail=f"The language model ({spec.id}) is not reachable: {exc}"
+            status_code=502, detail=f"The language model ({exc.model_id}) failed: {exc.reason}"
         ) from exc
 
 

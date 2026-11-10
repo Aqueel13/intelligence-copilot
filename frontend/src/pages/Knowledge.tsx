@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { api, type Answer, type RetrievedChunk, type SentenceCheck } from '../api/client'
-import { MarkdownLite } from '../components/MarkdownLite'
+import { Inline, MarkdownLite } from '../components/MarkdownLite'
 import { Card, ErrorNote, Segmented, StatusBadge } from '../components/ui'
 import { formatPercent } from '../lib/format'
 
@@ -161,7 +161,7 @@ function AnswerCard({ answer, onCite }: { answer: Answer; onCite: (n: number) =>
         {answer.checks.map((c, i) => (
           <div key={i} className="grid gap-1">
             <p className="text-sm leading-relaxed text-ink">
-              {c.sentence.replace(/[.!?]$/, '')}
+              <Inline text={c.sentence.replace(/[.!?]$/, '')} />
               {c.cited.map((n) => (
                 <button
                   key={n}
