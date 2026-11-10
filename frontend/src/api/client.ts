@@ -131,6 +131,78 @@ export interface ActivityAnalysis {
   definitions: Record<string, string>
 }
 
+export interface KnowledgeDocument {
+  document_id: number
+  doc_key: string
+  title: string
+  doc_type: string
+  version: string
+  status: 'current' | 'superseded' | 'draft'
+  effective_date: string | null
+  owner: string | null
+  source_name: string
+  chunks: number
+}
+
+export interface RetrievedChunk {
+  chunk_id: number
+  doc_key: string
+  title: string
+  version: string
+  status: string
+  doc_type: string
+  section: string
+  content: string
+  score: number
+  vector_rank: number | null
+  keyword_rank: number | null
+  vector_similarity: number | null
+  rerank_score: number | null
+}
+
+export interface Citation {
+  number: number
+  chunk_id: number
+  doc_key: string
+  title: string
+  version: string
+  section: string
+  content: string
+}
+
+export interface SentenceCheck {
+  sentence: string
+  model_cited: number[]
+  cited: number[]
+  status: 'supported' | 'corrected' | 'unsupported'
+  best_source: number
+  best_score: number
+  cited_score: number | null
+}
+
+export interface Answer {
+  question: string
+  answer: string
+  found: boolean
+  grounded: boolean
+  citations: Citation[]
+  invalid_citations: number[]
+  checks: SentenceCheck[]
+  model_citation_accuracy: number | null
+  sources: RetrievedChunk[]
+  model: string
+  retrieval_ms: number
+  generation_ms: number
+}
+
+export interface IngestResult {
+  doc_key: string
+  version: string
+  title: string
+  chunks: number
+  status: 'ingested' | 'unchanged' | 'replaced'
+}
+
 export class ApiError extends Error {}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -167,4 +239,24 @@ export const api = {
   processMap: (scope: Scope) => post<ProcessMap>('/process/map', scope),
   variants: (scope: Scope, top = 10) => post<VariantSummary>(`/process/variants?top=${top}`, scope),
   activities: (scope: Scope) => post<ActivityAnalysis>('/process/activities', scope),
+  documents: () => request<KnowledgeDocument[]>('/knowledge/documents'),
+  search: (query: string, includeSuperseded = false) =>
+    post<RetrievedChunk[]>('/knowledge/search', {
+      query,
+      k: 5,
+      filters: { include_superseded: includeSuperseded },
+    }),
+  ask: (question: string, includeSuperseded = false) =>
+    post<Answer>('/knowledge/ask', { question, filters: { include_superseded: includeSuperseded } }),
+  upload: async (file: File, fields: Record<string, string>): Promise<IngestResult> => {
+    const form = new FormData()
+    form.append('file', file)
+    for (const [k, v] of Object.entries(fields)) if (v) form.append(k, v)
+    const res = await fetch('/api/knowledge/documents', { method: 'POST', body: form })
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { detail?: string }
+      throw new ApiError(body.detail ?? `${res.status} ${res.statusText}`)
+    }
+    return res.json() as Promise<IngestResult>
+  },
 }

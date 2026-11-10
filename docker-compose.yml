@@ -27,6 +27,11 @@ services:
       APP_ENV: development
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-watchdog}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-watchdog}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      LLM_DEFAULT_MODEL: ${LLM_DEFAULT_MODEL:-ollama:qwen2.5:7b}
+      LLM_MODELS: ${LLM_MODELS:-{}}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -38,9 +43,12 @@ services:
     volumes:
       - ./backend/src:/app/src
       - ./backend/migrations:/app/migrations
-      # Resolved from /app as ../domain_packs and ../datasets/generated (the app defaults).
+      # Resolved from /app as ../domain_packs, ../datasets/generated, ../.cache/models.
       - ./domain_packs:/domain_packs:ro
       - ./datasets:/datasets
+      - ./.cache:/.cache   # embedding/reranker model files, shared with local runs
+    extra_hosts:
+      - "host.docker.internal:${DOCKER_BRIDGE_IP:-172.17.0.1}"
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -51,6 +59,14 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+    restart: unless-stopped
+
+  # Lets containers reach Ollama on the host WITHOUT exposing Ollama to the network:
+  # listens only on the Docker bridge address and forwards to Ollama on localhost.
+  ollama-relay:
+    image: alpine/socat:1.8.0.3
+    network_mode: host
+    command: ["TCP-LISTEN:11434,bind=${DOCKER_BRIDGE_IP:-172.17.0.1},fork,reuseaddr", "TCP:127.0.0.1:11434"]
     restart: unless-stopped
 
   frontend:

@@ -1,4 +1,4 @@
-.PHONY: up down logs ps test lint fmt check migrate data psql reset-db
+.PHONY: up down logs ps test lint fmt check migrate data knowledge seed psql reset-db
 
 up:            ## Build and start the full stack
 	docker compose up --build -d
@@ -17,6 +17,14 @@ migrate:       ## Apply database migrations
 
 data:          ## Generate the synthetic dataset (seed 42) and load it into the database
 	cd backend && uv run python -m watchdog_backend.generator --load
+
+knowledge:     ## Ingest the domain pack's policy documents into the knowledge base
+	cd backend && uv run python -m watchdog_backend.knowledge ingest
+
+seed: data knowledge   ## Everything a fresh database needs
+
+eval-retrieval: ## Retrieval benchmark (no LLM): hit@k and MRR per method
+	cd backend && uv run python -m watchdog_backend.knowledge evaluate
 
 test:          ## Run backend tests (needs the stack's Postgres running)
 	cd backend && uv run pytest

@@ -4,7 +4,7 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 
 **Watch → Investigate → Recommend → Act**
 
-> Status: **M2 — process mining and dashboard.** See [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md) for scope, decisions and milestones.
+> Status: **M3 — knowledge base with verified citations.** See [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md) for scope, decisions and milestones.
 
 ## Design principles
 
@@ -24,17 +24,19 @@ Requirements: Docker with Compose, [uv](https://docs.astral.sh/uv/), Node 24+.
 ```bash
 cp .env.example .env          # then set POSTGRES_PASSWORD (and the same value in DATABASE_URL)
 make up                       # build and start postgres, migrations, backend, frontend
-make data                     # generate 5,000 synthetic claims (seed 42) and load them
+make seed                     # generate 5,000 synthetic claims and ingest the policy documents
 ```
 
 | What | URL |
 |------|-----|
-| App: Overview and Process screens | http://localhost:5173 |
+| App: Overview, Process and Knowledge screens | http://localhost:5173 |
 | API docs | http://localhost:8000/api/docs |
 | Health | http://localhost:8000/api/health |
 | Metric catalogue | http://localhost:8000/api/metrics |
 
-Other commands: `make test`, `make lint`, `make check` (everything CI runs), `make psql`, `make logs`, `make down`.
+Other commands: `make test`, `make lint`, `make check` (everything CI runs), `make eval-retrieval`, `make psql`, `make logs`, `make down`.
+
+The LLM defaults to a local model through [Ollama](https://ollama.com) (`ollama pull qwen2.5:7b`). Set `LLM_DEFAULT_MODEL` / `LLM_MODELS` in `.env` to use Groq or Gemini instead.
 
 ## Repository layout
 
@@ -43,7 +45,10 @@ backend/       FastAPI app (src/watchdog_backend), Alembic migrations, tests
   analytics/   metrics engine (domain-pack metrics → safe, parameterised SQL) and
                SQL-native process mining (process map, variants, bottlenecks)
   generator/   synthetic data with planted root causes, decoys and ground truth
-domain_packs/  per-industry configuration (process, dimensions, rules, metrics)
+  knowledge/   document parsing, section-aware chunking, hybrid retrieval, cited answers
+  llm/         provider-agnostic LLM gateway (Ollama, Groq, Gemini)
+domain_packs/  per-industry configuration (process, dimensions, rules, metrics),
+               policy documents and evaluation sets
 frontend/      React + Vite + Tailwind UI
 docs/          Project brief, architecture, evaluation reports
 .github/       CI: lint, migrate, test, migration round-trip, frontend build

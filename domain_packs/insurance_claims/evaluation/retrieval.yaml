@@ -1,0 +1,63 @@
+# Retrieval benchmark for the Insurance Claims knowledge base.
+#
+# Each question lists the passage(s) that answer it, as doc_key + a substring of the section
+# heading. A retrieved chunk is relevant if it matches any listed passage.
+# Questions are phrased the way an operations manager would ask, not copied from the text.
+
+questions:
+  - q: What is the turnaround commitment for reimbursement claims?
+    relevant: [{ doc: POL-001, section: "3. Customer turnaround" }]
+  - q: Does time waiting for the customer's documents count towards the SLA?
+    relevant: [{ doc: POL-001, section: "3. Customer turnaround" }, { doc: SOP-101, section: "3. Document check" }]
+  - q: How quickly should senior approval happen after QA?
+    relevant: [{ doc: POL-002, section: "3. Approval levels" }, { doc: POL-001, section: "4. Internal stage targets" }]
+  - q: Who approves a claim of three lakh rupees?
+    relevant: [{ doc: POL-002, section: "3. Approval levels" }, { doc: POL-002, section: "4. Rules" }]
+  - q: Can senior adjuster approval authority be delegated to team leads?
+    relevant: [{ doc: POL-002, section: "4. Rules" }]
+  - q: Why was the senior approval threshold changed and when?
+    relevant: [{ doc: POL-002, section: "2. Change summary" }]
+  - q: What must happen if waiting time before senior approval exceeds target for two months?
+    relevant: [{ doc: POL-002, section: "5. Monitoring" }, { doc: POL-004, section: "2. Stage-level escalation" }]
+  - q: How many senior adjusters do we have and how many approvals can they handle?
+    relevant: [{ doc: OPS-301, section: "4. Senior Adjuster capacity" }, { doc: OPS-301, section: "3. Staffing" }]
+  - q: Was the capacity plan updated for the new approval threshold?
+    relevant: [{ doc: OPS-301, section: "5. Risks" }, { doc: OPS-301, section: "1. Basis" }]
+  - q: How many senior approvals per month did the capacity plan expect?
+    relevant: [{ doc: OPS-301, section: "2. Expected volumes" }]
+  - q: Do brokers have to follow the same document checklist as direct customers?
+    relevant: [{ doc: SOP-101, section: "3. Document check" }, { doc: SOP-102, section: "2. Broker responsibilities" }]
+  - q: What is the first-time-right target for broker submissions?
+    relevant: [{ doc: SOP-102, section: "3. Submission quality" }]
+  - q: Why do broker claims arrive without complete documents?
+    relevant: [{ doc: SOP-102, section: "4. Known issues" }]
+  - q: How many document requests should the intake desk raise for a claim?
+    relevant: [{ doc: SOP-101, section: "3. Document check" }]
+  - q: Which documents are needed for a motor reimbursement claim?
+    relevant: [{ doc: REF-201, section: "Mandatory documents" }]
+  - q: What documents are most often missing on health claims?
+    relevant: [{ doc: REF-202, section: "Common reasons" }]
+  - q: What happens to a claim that QA rejects?
+    relevant: [{ doc: SOP-105, section: "4. Rework" }]
+  - q: What is the acceptable QA rejection rate for a verification team?
+    relevant: [{ doc: SOP-105, section: "5. Quality targets" }]
+  - q: What action is required when a team's rejection rate is above ten percent?
+    relevant: [{ doc: SOP-105, section: "5. Quality targets" }]
+  - q: Are back-office teams working on weekends?
+    relevant: [{ doc: POL-003, section: "1. Working hours" }]
+  - q: What happens to work handed over late on a Friday afternoon?
+    relevant: [{ doc: POL-003, section: "2. Handoffs" }]
+  - q: Is there an option to work Saturdays to clear the backlog?
+    relevant: [{ doc: POL-003, section: "3. Weekend rota" }]
+  - q: When is the customer satisfaction survey sent?
+    relevant: [{ doc: POL-005, section: "2. Post-closure survey" }]
+  - q: Why might survey scores understate customer satisfaction?
+    relevant: [{ doc: POL-005, section: "3. Reporting" }]
+  - q: When is a surveyor appointed for a motor claim?
+    relevant: [{ doc: SOP-103, section: "2. Surveyor appointment" }]
+  - q: How long does payment take after final approval?
+    relevant: [{ doc: SOP-106, section: "1. Settlement" }, { doc: POL-001, section: "4. Internal stage targets" }]
+  - q: Who is alerted when a claim has not been approved after 72 hours?
+    relevant: [{ doc: POL-004, section: "1. Claim-level escalation" }]
+  - q: Do health claims take longer to adjudicate than motor claims to survey?
+    relevant: [{ doc: SOP-104, section: "4. Claim value" }]

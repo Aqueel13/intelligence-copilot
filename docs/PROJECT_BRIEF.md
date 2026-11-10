@@ -40,6 +40,10 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 | D15 | **GitHub OAuth** for the public demo | Free; the audience (recruiters, engineers) mostly has GitHub accounts. |
 | D16 | **Currency INR; Indian insurance context** | Realistic and matches the author's domain experience. Amounts in ₹, lakh/crore formatting in the UI. |
 | D17 | **Process mining in SQL, not PM4Py** | PM4Py is AGPL v3, which would force the whole app (including the hosted demo) to be AGPL. The process map, variants and bottlenecks are computed exactly in SQL, keeping the license choice open. |
+| D18 | **Embeddings and reranking via fastembed (ONNX)**: `BAAI/bge-small-en-v1.5` (384-d, MIT) and `Xenova/ms-marco-MiniLM-L-6-v2` (Apache) | No PyTorch (environment stays ~450 MB), CPU-only, runs in CI. Embeddings are stored with their model ID in an untyped `vector` column, so changing models means re-embedding, not a schema change. |
+| D19 | **Default retrieval = hybrid (vector + full-text, RRF), no reranking** | Measured on the 28-question benchmark: hybrid reaches Hit@3 = Hit@5 = 1.00; reranking adds ~300 ms per query and no measurable gain on this corpus. Reranking stays available and benchmarked. |
+| D20 | **Citations are verified, not trusted** | The cross-encoder scores every answer sentence against every retrieved source. Unsupported citations are corrected to the best source (only if it scores ≥ 3.0) or flagged. Both the model's own citation accuracy and the final grounding are recorded. qwen2.5:7b often cites the wrong source number for correct statements. |
+| D21 | **Containers reach host Ollama through a relay** | A socat container on the host network listens only on the Docker bridge (172.17.0.1) and forwards to Ollama on localhost. Ollama is never exposed to the LAN (the laptop has no firewall). |
 
 ## 4. Product shape
 

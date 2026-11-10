@@ -17,6 +17,7 @@ dist/
 # Data produced locally (generated datasets are reproducible from the generator)
 storage/
 datasets/generated/
+.cache/
 *.local
 
 # Editors / OS

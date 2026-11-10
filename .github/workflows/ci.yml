@@ -34,6 +34,11 @@ jobs:
         with:
           version: "0.13.7"
       - run: uv sync --frozen
+      - name: Cache embedding and reranker models
+        uses: actions/cache@v4
+        with:
+          path: .cache/models
+          key: models-${{ hashFiles('backend/src/watchdog_backend/config.py') }}
       - name: Lint
         run: uv run ruff check . && uv run ruff format --check .
       - name: Migrate

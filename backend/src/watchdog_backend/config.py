@@ -26,6 +26,20 @@ class Settings(BaseSettings):
     # Generated synthetic data and ground truth (git-ignored, reproducible from the seed).
     datasets_dir: str = "../datasets/generated"
 
+    # Knowledge base: local ONNX models (downloaded once into the cache directory).
+    models_cache_dir: str = "../.cache/models"
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    reranker_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
+
+    # LLM gateway. Models are "provider:model", provider in {ollama, groq, gemini}.
+    # `llm_models` maps a role (e.g. "answer", "planner") to a model; others use the default.
+    llm_default_model: str = "ollama:qwen2.5:7b"
+    llm_models: dict[str, str] = {}
+    llm_timeout_seconds: float = 90.0
+    ollama_base_url: str = "http://localhost:11434"
+    groq_api_key: str | None = None
+    gemini_api_key: str | None = None
+
     # Comma-separated list of allowed browser origins.
     cors_origins: str = "http://localhost:5173"
 

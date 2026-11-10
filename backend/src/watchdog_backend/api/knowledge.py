@@ -1,0 +1,116 @@
+from datetime import date
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
+from pydantic import BaseModel, Field
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from watchdog_backend.db import get_session
+from watchdog_backend.domain.pack import get_pack
+from watchdog_backend.knowledge.answer import Answer, answer_question
+from watchdog_backend.knowledge.ingest import IngestResult, ingest_document
+from watchdog_backend.knowledge.models import get_embedder, get_reranker
+from watchdog_backend.knowledge.parsing import UnsupportedDocument, parse_document
+from watchdog_backend.knowledge.retrieval import Method, RetrievedChunk, SearchFilters
+from watchdog_backend.knowledge.service import get_retriever
+from watchdog_backend.llm.gateway import LLMConfigError, get_chat_model
+
+router = APIRouter(prefix="/knowledge", tags=["knowledge"])
+DbSession = Annotated[Session, Depends(get_session)]
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
+
+class DocumentInfo(BaseModel):
+    document_id: int
+    doc_key: str
+    title: str
+    doc_type: str
+    version: str
+    status: str
+    effective_date: date | None
+    owner: str | None
+    source_name: str
+    chunks: int
+
+
+@router.get("/documents", response_model=list[DocumentInfo])
+def list_documents(session: DbSession) -> list[DocumentInfo]:
+    rows = session.execute(
+        text("""
+            SELECT d.document_id, d.doc_key, d.title, d.doc_type, d.version, d.status,
+                   d.effective_date, d.owner, d.source_name, count(c.chunk_id) AS chunks
+            FROM knowledge.documents d
+            LEFT JOIN knowledge.chunks c USING (document_id)
+            WHERE d.domain = :d
+            GROUP BY d.document_id
+            ORDER BY d.doc_key, d.effective_date DESC NULLS LAST
+        """),
+        {"d": get_pack().domain},
+    ).mappings()
+    return [DocumentInfo(**r) for r in rows]
+
+
+class SearchRequest(BaseModel):
+    query: str = Field(min_length=2, max_length=500)
+    k: int = Field(5, ge=1, le=20)
+    method: Method = "hybrid"
+    filters: SearchFilters = Field(default_factory=SearchFilters)
+
+
+@router.post("/search", response_model=list[RetrievedChunk])
+def search(req: SearchRequest, session: DbSession) -> list[RetrievedChunk]:
+    return get_retriever().search(session.connection(), req.query, req.k, req.method, req.filters)
+
+
+class AskRequest(BaseModel):
+    question: str = Field(min_length=3, max_length=500)
+    k: int = Field(5, ge=1, le=10)
+    method: Method = "hybrid"
+    filters: SearchFilters = Field(default_factory=SearchFilters)
+
+
+@router.post("/ask", response_model=Answer)
+def ask(req: AskRequest, session: DbSession) -> Answer:
+    try:
+        model, spec = get_chat_model("answer")
+    except LLMConfigError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    try:
+        return answer_question(
+            session.connection(), get_retriever(), model, spec.id, req.question,
+            get_reranker(), k=req.k, method=req.method, filters=req.filters,
+        )  # fmt: skip
+    except (ConnectionError, TimeoutError, OSError) as exc:
+        raise HTTPException(
+            status_code=503, detail=f"The language model ({spec.id}) is not reachable: {exc}"
+        ) from exc
+
+
+@router.post("/documents", response_model=IngestResult, status_code=201)
+async def upload_document(
+    session: DbSession,
+    file: UploadFile,
+    doc_key: Annotated[str | None, Form()] = None,
+    title: Annotated[str | None, Form()] = None,
+    doc_type: Annotated[str | None, Form()] = None,
+    version: Annotated[str | None, Form()] = None,
+    status: Annotated[str | None, Form()] = None,
+) -> IngestResult:
+    data = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File is larger than 10 MB")
+    if status not in (None, "", "current", "superseded", "draft"):
+        raise HTTPException(status_code=422, detail="status must be current, superseded or draft")
+    try:
+        doc = parse_document(
+            file.filename or "upload",
+            data,
+            {"id": doc_key, "title": title, "doc_type": doc_type, "version": version,
+             "status": status},
+        )  # fmt: skip
+    except UnsupportedDocument as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    result = ingest_document(session.connection(), get_pack().domain, doc, get_embedder())
+    session.commit()
+    return result
