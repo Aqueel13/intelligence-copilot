@@ -179,12 +179,14 @@ def test_search_endpoint(client) -> None:
 
 
 def test_ask_endpoint_with_fake_model(client, monkeypatch) -> None:
-    from watchdog_backend.api import knowledge as api
+    from watchdog_backend.knowledge import qa
     from watchdog_backend.llm.gateway import ModelSpec
 
     fake = FakeListChatModel(responses=["The QA rejection target is 5% or lower per team [1]."])
-    monkeypatch.setattr(api, "get_chat_model", lambda role: (fake, ModelSpec("ollama", "fake")))
-    body = client.post("/api/knowledge/ask", json={"question": "What is the QA target?"}).json()
+    monkeypatch.setattr(qa, "get_chat_model", lambda role: (fake, ModelSpec("ollama", "fake")))
+    body = client.post(
+        "/api/knowledge/ask", json={"question": "What is the QA target?", "use_cache": False}
+    ).json()
     assert body["grounded"] and body["citations"][0]["doc_key"] == "SOP-105"
 
 
