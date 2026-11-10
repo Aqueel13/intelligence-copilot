@@ -9,6 +9,9 @@
 #   remove_repeats    remove loop time: every occurrence of `always`, and repeat occurrences of
 #                     `repeats`. `fraction: excess` removes only the share above the baseline
 #                     rate of comparable claims (`baseline_dimension`), not every loop.
+# follow_up: the metric that should move if the action works, checked by the Watch layer after
+#            the action is executed (target in the metric's unit, `expect` = below | above).
+#
 #   cap_handoff_wait  handoffs on `weekday` from `from_hour` still wait for the next working
 #                     morning, but then only for the activity's typical (median) queue: the
 #                     backlog delay is removed, the weekend itself is not
@@ -33,6 +36,8 @@ actions:
       basis: Team Lead time, 0.5 hour per delegated approval
       per_affected_claim_hours: 0.5
       rate: team_lead_cost_per_hour_inr
+    follow_up: { metric: avg_wait_hours, expect: below, target: 24,
+                 filters: { activity: [Senior Approval], amount_band: ["₹2L–₹5L"] } }
     operation: { type: update_approval_routing,
                  params: { band_min_inr: 200000, band_max_inr: 500000, approver_role: Team Lead } }
 
@@ -47,6 +52,8 @@ actions:
     annual_cost:
       basis: One Senior Adjuster, fully loaded
       fixed_inr: 2400000
+    follow_up: { metric: avg_wait_hours, expect: below, target: 24,
+                 filters: { activity: [Senior Approval] } }
     operation: { type: create_staffing_request, params: { role: Senior Adjuster, headcount: 1 } }
 
   enforce_broker_checklist:
@@ -62,6 +69,8 @@ actions:
     annual_cost:
       basis: Portal change and broker refresher sessions (one-off, spread over a year)
       fixed_inr: 400000
+    follow_up: { metric: doc_request_rate, expect: below, target: 0.08,
+                 filters: { channel: [broker] } }
     operation: { type: create_change_request,
                  params: { system: Broker portal, change: Make checklist upload mandatory } }
 
@@ -77,6 +86,8 @@ actions:
     annual_cost:
       basis: Two days of training for 5 staff plus 30 days of peer review time
       fixed_inr: 150000
+    follow_up: { metric: rework_rate, expect: below, target: 0.05,
+                 filters: { team: [Team B] } }
     operation: { type: schedule_training, params: { team: Team B, programme: QA rejection reasons } }
 
   saturday_rota:
@@ -91,4 +102,6 @@ actions:
       basis: 6 staff × 4 hours × 52 Saturdays
       fixed_hours: 1248
       rate: staff_cost_per_hour_inr
+    follow_up: { metric: avg_wait_hours, expect: below, target: 20,
+                 filters: { handoff_weekday: [Fri], activity: [Verification, QA, Settlement] } }
     operation: { type: update_roster, params: { day: Saturday, hours: "09:00-13:00" } }

@@ -1,0 +1,77 @@
+# KPI monitors for Insurance Claims. Evaluated by code, monthly (by FNOL month), using the same
+# metrics engine as the dashboard and the investigation agent.
+#
+# direction:   above | below  (which side of the threshold is bad)
+# warning / critical:  thresholds in the metric's unit (ratios as 0.30, hours as 48)
+# critical_months:     critical only if beyond the critical threshold for this many consecutive
+#                      months (policies often say "for two consecutive months")
+# group_by:    evaluate each segment separately (one alert per segment)
+# min_sample:  below this many records the month is "insufficient data", never an alert
+# question:    what "Investigate" asks; {segment} is replaced with the segment's label
+
+monitors:
+  sla_breach:
+    title: SLA breach rate
+    metric: sla_breach_rate
+    direction: above
+    warning: 0.25
+    critical: 0.30
+    min_sample: 100
+    policy_ref: "POL-001 §5"
+    question: Why are claims breaching the five-day SLA? Find the root causes and recommend corrective actions.
+
+  senior_approval_wait:
+    title: Waiting time before Senior Approval
+    metric: avg_wait_hours
+    filters: { activity: [Senior Approval] }
+    direction: above
+    warning: 24
+    critical: 24
+    critical_months: 2
+    min_sample: 30
+    policy_ref: "POL-002 §5"
+    question: Why are claims waiting so long for Senior Approval, and what should we do about it?
+
+  documents_requested:
+    title: Additional documents requested
+    metric: doc_request_rate
+    group_by: channel
+    direction: above
+    warning: 0.08
+    critical: 0.15
+    min_sample: 100
+    policy_ref: "SOP-101 §4"
+    question: Why do {segment} claims so often need additional documents?
+
+  verification_rework:
+    title: Verification rework rate
+    metric: rework_rate
+    group_by: team
+    direction: above
+    warning: 0.05
+    critical: 0.10
+    critical_months: 2
+    min_sample: 100
+    policy_ref: "SOP-105 §5.1"
+    question: Why is {segment}'s verification rework rate so high?
+
+  friday_backlog:
+    title: Waiting after Friday handoffs (Verification, QA, Settlement)
+    metric: avg_wait_hours
+    filters: { handoff_weekday: [Fri], activity: [Verification, QA, Settlement] }
+    direction: above
+    warning: 20
+    critical: 30
+    min_sample: 100
+    policy_ref: "POL-003 §2.2"
+    question: Why does work handed over on Friday wait so long?
+
+  customer_satisfaction:
+    title: Customer satisfaction (respondents)
+    metric: avg_csat
+    direction: below
+    warning: 3.8
+    critical: 3.5
+    min_sample: 30
+    policy_ref: "POL-005 §3.3"
+    question: Why is customer satisfaction low?

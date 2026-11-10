@@ -4,7 +4,7 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 
 **Watch → Investigate → Recommend → Act**
 
-> Status: **M5 — governed actions over MCP.** See [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md) for scope, decisions and milestones.
+> Status: **M6 — watch: monitors, alerts and follow-ups.** See [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md) for scope, decisions and milestones.
 
 ## Design principles
 
@@ -30,12 +30,12 @@ make seed                     # generate 5,000 synthetic claims and ingest the p
 
 | What | URL |
 |------|-----|
-| App: Overview, Process, Knowledge, Investigate and Actions screens | http://localhost:5173 |
+| App: Watch, Overview, Process, Knowledge, Investigate and Actions screens | http://localhost:5173 |
 | API docs | http://localhost:8000/api/docs |
 | Health | http://localhost:8000/api/health |
 | Metric catalogue | http://localhost:8000/api/metrics |
 
-Other commands: `make test`, `make lint`, `make check` (everything CI runs), `make eval-retrieval`, `make psql`, `make logs`, `make down`.
+Other commands: `make watch` (evaluate monitors now), `make test`, `make lint`, `make check` (everything CI runs), `make eval-retrieval`, `make psql`, `make logs`, `make down`. The `watcher` service evaluates monitors every hour (`WATCH_INTERVAL_SECONDS`).
 
 The LLM defaults to a local model through [Ollama](https://ollama.com) (`ollama pull qwen2.5:7b`). Set `LLM_DEFAULT_MODEL` / `LLM_MODELS` in `.env` to use Groq or Gemini instead.
 
@@ -64,10 +64,11 @@ backend/       FastAPI app (src/watchdog_backend), Alembic migrations, tests
   investigation/  LangGraph investigation: scan → plan → evidence → assess → recommend → summary,
                   with confounder overrides, what-if valuation and number verification
   governance/  action rules (roles, separation of duties, approve-before-execute), audit chain
+  watch/       KPI monitors, alerts, action follow-ups, next-month simulator (demo)
   mcp_servers/ Operations MCP server (governed actions for any MCP client)
   enterprise_mock/  stand-in for the client's claims administration system
-domain_packs/  per-industry configuration (process, dimensions, rules, metrics,
-               action catalogue), policy documents and evaluation sets
+domain_packs/  per-industry configuration (process, dimensions, rules, metrics, monitors,
+               action catalogue, governance), policy documents and evaluation sets
 frontend/      React + Vite + Tailwind UI
 docs/          Project brief, architecture, evaluation reports
 .github/       CI: lint, migrate, test, migration round-trip, frontend build

@@ -56,6 +56,13 @@ class Operation(_Strict):
     params: dict[str, object] = Field(default_factory=dict)
 
 
+class FollowUp(_Strict):
+    metric: str
+    expect: Literal["below", "above"]
+    target: float
+    filters: dict[str, list[str]] = Field(default_factory=dict)
+
+
 class Action(_Strict):
     id: str
     title: str
@@ -64,6 +71,7 @@ class Action(_Strict):
     effort: Literal["low", "medium", "high"]
     lever: Lever
     annual_cost: AnnualCost
+    follow_up: FollowUp | None = None
     operation: Operation
 
 

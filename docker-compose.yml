@@ -82,6 +82,19 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  # Watch layer: evaluates the domain pack's KPI monitors on a schedule and maintains alerts.
+  watcher:
+    build: ./backend
+    command: ["python", "-m", "watchdog_backend.watch", "--every", "${WATCH_INTERVAL_SECONDS:-3600}"]
+    environment: *backend-env
+    volumes:
+      - ./backend/src:/app/src
+      - ./domain_packs:/domain_packs:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
   # Stand-in for the client's claims administration system (internal only).
   enterprise-mock:
     build: ./backend

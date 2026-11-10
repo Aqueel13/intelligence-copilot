@@ -45,8 +45,14 @@ RC4_SLOTS = 16
 class GeneratorConfig:
     n_claims: int = 5000
     seed: int = 42
+    # Trend window: RC1 worsens from `start` to `end` (and keeps worsening after it).
     start: date = date(2026, 4, 1)
     end: date = date(2026, 9, 30)
+    # Generation window: FNOL dates are drawn from here (defaults to the trend window).
+    # The simulator uses it to append later months that continue the same trends.
+    window_start: date | None = None
+    window_end: date | None = None
+    id_offset: int = 0  # case numbers start after this (for appended months)
 
     lob_weights: dict[str, float] = field(default_factory=lambda: {"motor": 0.55, "health": 0.45})
     channel_weights: dict[str, float] = field(
@@ -89,6 +95,9 @@ class GeneratorConfig:
     rework_requeue_wait_median_h: float = 9.0
 
     # RC1: senior approval queue (extra waiting in working hours, rising Apr → Sep)
+    rc1_enabled: bool = True
+    # Claims up to this amount skip the senior queue (delegated to Team Leads); None = no one
+    rc1_exempt_max_amount: float | None = None
     senior_base_wait_median_h: float = 4.0
     rc1_extra_median_first_month_h: float = 12.0
     rc1_extra_median_last_month_h: float = 26.0
@@ -210,11 +219,12 @@ class InsuranceClaimsGenerator:
         )
         amount = round(min(max(_lognormal(median, sigma, d.amount), c.amount_floor), c.amount_cap))
 
-        n_days = (c.end - c.start).days + 1
-        day = c.start + timedelta(days=int(d.fnol_day * n_days))
+        w_start, w_end = c.window_start or c.start, c.window_end or c.end
+        n_days = (w_end - w_start).days + 1
+        day = w_start + timedelta(days=int(d.fnol_day * n_days))
         if d.fnol_mode < 0.85:  # most FNOLs arrive in working hours on a working day
             while day.weekday() not in self.cal.workdays:
-                day = day + timedelta(days=1) if day < c.end else day - timedelta(days=3)
+                day = day + timedelta(days=1) if day < w_end else day - timedelta(days=3)
             start_h, end_h = self.cal.start.hour, self.cal.end.hour
             hour = start_h + d.fnol_hour * (end_h - start_h)
         else:  # app / call-centre claims at any time
@@ -223,7 +233,7 @@ class InsuranceClaimsGenerator:
         fnol_at = fnol_at.replace(second=0, microsecond=0)
         month_index = (day.year - c.start.year) * 12 + day.month - c.start.month
         return ClaimProfile(
-            case_id=f"{self.pack.case.id_prefix}-{c.start.year}-{i + 1:06d}",
+            case_id=f"{self.pack.case.id_prefix}-{c.start.year}-{i + 1 + c.id_offset:06d}",
             lob=lob,
             channel=channel,
             region=region,
@@ -348,7 +358,8 @@ class InsuranceClaimsGenerator:
         # Senior approval above the threshold (RC1: understaffed, worsening over time)
         if p.amount > self.senior_threshold:
             wait = _lognormal(c.senior_base_wait_median_h, 0.6, d.senior_wait)
-            if "RC1" not in disabled:
+            exempt = c.rc1_exempt_max_amount is not None and p.amount <= c.rc1_exempt_max_amount
+            if "RC1" not in disabled and c.rc1_enabled and not exempt:
                 progress = p.month_index / max(self.n_months, 1)
                 median = c.rc1_extra_median_first_month_h + progress * (
                     c.rc1_extra_median_last_month_h - c.rc1_extra_median_first_month_h
@@ -440,7 +451,7 @@ class InsuranceClaimsGenerator:
     def generate(self) -> "GeneratedDataset":
         cases, events, feedback, truth = [], [], [], []
         for i in range(self.cfg.n_claims):
-            d = Draws(np.random.default_rng([self.cfg.seed, i]))
+            d = Draws(np.random.default_rng([self.cfg.seed, i + self.cfg.id_offset]))
             p = self._profile(i, d)
             full = self.simulate(p, d, NO_CAUSES)
             counterfactual = {cause: self.simulate(p, d, frozenset({cause})) for cause in CAUSES}

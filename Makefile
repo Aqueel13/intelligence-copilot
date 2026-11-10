@@ -1,4 +1,4 @@
-.PHONY: secrets up down logs ps test lint fmt check migrate data knowledge seed psql reset-db
+.PHONY: secrets watch up down logs ps test lint fmt check migrate data knowledge seed psql reset-db
 
 secrets:       ## Add any missing generated secrets to .env (never overwrites existing ones)
 	@for k in OPERATIONS_MCP_BACKEND_TOKEN OPERATIONS_MCP_EXTERNAL_TOKEN ENTERPRISE_API_KEY; do \
@@ -30,6 +30,9 @@ seed: data knowledge   ## Everything a fresh database needs
 
 eval-retrieval: ## Retrieval benchmark (no LLM): hit@k and MRR per method
 	cd backend && uv run python -m watchdog_backend.knowledge evaluate
+
+watch:         ## Evaluate the KPI monitors once and update alerts
+	cd backend && uv run python -m watchdog_backend.watch
 
 test:          ## Run backend tests (needs the stack's Postgres running)
 	cd backend && uv run pytest

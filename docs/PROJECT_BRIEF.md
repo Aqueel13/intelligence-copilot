@@ -53,6 +53,10 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 | D28 | **Agents cannot approve** | The Operations MCP server has no approve tool, and the service refuses decisions from non-users. Approvers need a role named in `governance.yaml` (taken from the policies, e.g. POL-002 §4.3 → Head of Claims), and the proposer may not approve (separation of duties). |
 | D29 | **Tamper-evident audit log** | Every attempt, including every refusal, is appended with a SHA-256 hash chain; refusals are committed even when the request fails. Editing, inserting or deleting an entry is detected by `/api/audit/verify`. |
 | D30 | **MCP SDK v2, static bearer tokens** | Each MCP client has its own token (identity in the audit log). Published on localhost only. Refusals are raised as `ToolError` so clients see *why*; unexpected errors stay opaque. Demo user identities are self-asserted until M8 adds login. |
+| D31 | **Monitors as configuration, thresholds from policy** | `monitors.yaml` in the domain pack; evaluated monthly through the metrics engine. Consecutive-month rules mirror the policies (POL-002 §5, SOP-105 §5.1); low-sample months never alert. One open alert per monitor and segment, resolved automatically. |
+| D32 | **Follow-ups close the loop** | Each catalogue action names the metric it should move and a target; after execution the Watch layer compares before vs after and reports on target / improving / no change / worse. |
+| D33 | **"Simulate next month" is a labelled demo device** | The historical data ends in September, so the same generator appends a synthetic month with executed actions applied (trends continue). Recorded in `simulated_months`; `make seed` resets it. |
+| D34 | **Per-case activity counts are materialized** | Postgres cannot estimate selectivity of JSONB-attribute filters; for narrow filters it chose a plan that re-aggregated all events per case (a 2-second query took ~5 minutes). An indexed materialized view, refreshed by the loader, makes every plan cheap. |
 
 ## 4. Product shape
 
@@ -240,6 +244,18 @@ Report actual results with failures. Compare at least two LLM providers on quali
 | Duration | ~80 s | ~60 s |
 
 Single runs, not yet a benchmark: M7 repeats these across seeds and models. Observations: the 7B model needed the coverage rule and the override more often; the 120B model is more conservative and initially called loop effects "inconclusive" until mechanism evidence (breach rate with vs without the loop) was added.
+
+### M6 results (2026-11-10)
+
+Closed loop on the dev data: delegation and Team B retraining were executed in M5, then October was simulated with both applied.
+
+| Monitor | Sep | Oct | Outcome |
+|---|---|---|---|
+| SLA breach rate | 34.0% | 19.0% | alert resolved |
+| Team B rework | 20.1% | 3.6% | resolved; follow-up on target (≤ 5%) |
+| Senior Approval wait, ₹2L–₹5L | ~111 h | 14.7 h | delegation follow-up on target (≤ 24 h) |
+| Senior Approval wait, all | 130 h | 37.7 h | still critical: claims above ₹5L still queue |
+| Broker documents | 22.8% | 26.5% | still critical: no action taken yet |
 
 ## 10. Open questions
 

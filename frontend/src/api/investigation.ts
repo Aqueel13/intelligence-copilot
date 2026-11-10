@@ -1,5 +1,5 @@
 // Types and streaming client for investigations. Shapes mirror backend/investigation/graph.py.
-import type { Answer, MetricResult, Scope } from './client'
+import type { Answer, MetricResult, Scope, Unit } from './client'
 
 export type Verdict = 'supported' | 'refuted' | 'inconclusive'
 
@@ -269,4 +269,91 @@ export const actionsApi = {
   execute: (id: string, user_id: string) => send(`/api/actions/${id}/execute`, { user_id }).then((r) => json<ActionRequest>(r)),
   audit: () => fetch('/api/audit').then((r) => json<AuditEntry[]>(r)),
   verify: () => fetch('/api/audit/verify').then((r) => json<AuditVerification>(r)),
+}
+
+// ------------------------------------------------------------------ watch
+
+export type MonitorStatus = 'ok' | 'warning' | 'critical' | 'insufficient_data'
+
+export interface Evaluation {
+  monitor_id: string
+  title: string
+  metric: string
+  unit: Unit
+  segment: string
+  segment_label: string
+  period: string
+  value: number | null
+  n: number
+  status: MonitorStatus
+  threshold: number | null
+  warning: number
+  critical: number
+  direction: 'above' | 'below'
+  critical_months: number
+  message: string
+  policy_ref: string | null
+  question: string
+  scope: Record<string, string[]>
+  series: { period: string; value: number | null; n: number; status: MonitorStatus }[]
+}
+
+export interface Alert {
+  alert_id: string
+  monitor_id: string
+  segment: string
+  severity: 'warning' | 'critical'
+  status: 'open' | 'acknowledged' | 'resolved'
+  value: number
+  threshold: number
+  first_period: string
+  last_period: string
+  message: string
+  opened_at: string
+  updated_at: string
+  acknowledged_by: string | null
+  resolved_at: string | null
+  investigation_id: string | null
+}
+
+export interface FollowUp {
+  request_id: string
+  action_id: string
+  title: string
+  metric: string
+  unit: Unit
+  target: number
+  expect: 'below' | 'above'
+  effective_month: string | null
+  before: number | null
+  after: number | null
+  verdict: 'awaiting_data' | 'on_target' | 'improving' | 'no_change' | 'worse'
+  message: string
+}
+
+export interface RunSummary {
+  period: string | null
+  evaluated: number
+  opened: number
+  updated: number
+  resolved: number
+  duration_ms: number
+  evaluations: Evaluation[]
+}
+
+export interface WatchStatus {
+  summary: RunSummary
+  alerts: Alert[]
+  follow_ups: FollowUp[]
+  simulated_months: { month: string; claims: number; applied_actions: string[] }[]
+  last_run: { started_at: string; trigger: string; period: string } | null
+}
+
+export const watchApi = {
+  status: () => fetch('/api/watch').then((r) => json<WatchStatus>(r)),
+  run: () => fetch('/api/watch/run', { method: 'POST' }).then((r) => json<RunSummary>(r)),
+  simulate: () => fetch('/api/watch/simulate-month', { method: 'POST' }).then((r) => json<{ month: { month: string } }>(r)),
+  acknowledge: (id: string, user_id: string) => send(`/api/watch/alerts/${id}/acknowledge`, { user_id }).then((r) => json<Alert>(r)),
+  link: (id: string, investigation_id: string) =>
+    send(`/api/watch/alerts/${id}/investigation`, { investigation_id }).then((r) => json<Alert>(r)),
 }

@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import type { Scope } from '../api/client'
 import {
   actionsApi,
   investigationsApi,
+  watchApi,
   streamInvestigation,
   type Hypothesis,
   type InvestigationState,
@@ -76,9 +77,13 @@ export default function Investigate() {
         (e) => {
           if (e.event === 'start') {
             setModels(e.data.models)
+            const alertId = params.get('alert')
+            if (alertId) watchApi.link(alertId, e.data.id).catch(() => {})
             setParams((p) => {
               const n = new URLSearchParams(p)
               n.set('id', e.data.id)
+              n.delete('q')
+              n.delete('alert')
               return n
             }, { replace: true })
           } else if (e.event === 'step') {
@@ -102,6 +107,17 @@ export default function Investigate() {
       qc.invalidateQueries({ queryKey: ['investigations'] })
     }
   }
+
+  // Arriving from a Watch alert: run its question once, scoped by the URL's filters.
+  const started = useRef(false)
+  const preset = params.get('q')
+  useEffect(() => {
+    if (preset && !openId && !started.current && domain.data) {
+      started.current = true
+      run(preset)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preset, openId, domain.data])
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault()

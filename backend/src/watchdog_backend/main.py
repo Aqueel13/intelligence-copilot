@@ -12,6 +12,7 @@ from watchdog_backend.api import (
     knowledge,
     metrics,
     process,
+    watch,
 )
 from watchdog_backend.config import get_settings
 
@@ -39,6 +40,7 @@ def create_app() -> FastAPI:
     app.include_router(knowledge.router, prefix="/api")
     app.include_router(investigations.router, prefix="/api")
     app.include_router(actions.router, prefix="/api")
+    app.include_router(watch.router, prefix="/api")
     return app
 
 

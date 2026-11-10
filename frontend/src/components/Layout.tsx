@@ -1,18 +1,35 @@
 import { useQuery } from '@tanstack/react-query'
 import { NavLink, Outlet, useLocation } from 'react-router'
 import { api } from '../api/client'
+import { watchApi } from '../api/investigation'
 import { formatCount, formatDimensionValue, formatMonth } from '../lib/format'
 import { useActingUser } from '../lib/actingUser'
 import { useDomainScope } from '../lib/hooks'
 import { monthsBetween } from '../lib/scope'
 
 const NAV: { to: string; label: string; ready: boolean; milestone?: string }[] = [
+  { to: '/watch', label: 'Watch', ready: true },
   { to: '/overview', label: 'Overview', ready: true },
   { to: '/process', label: 'Process', ready: true },
   { to: '/knowledge', label: 'Knowledge', ready: true },
   { to: '/investigate', label: 'Investigate', ready: true },
   { to: '/actions', label: 'Actions', ready: true },
 ]
+
+function OpenAlerts() {
+  const q = useQuery({ queryKey: ['watch'], queryFn: watchApi.status, refetchInterval: 60_000 })
+  const open = q.data?.alerts.filter((a) => a.status !== 'resolved') ?? []
+  if (!open.length) return null
+  const critical = open.some((a) => a.severity === 'critical')
+  return (
+    <span
+      className={`ml-1 rounded-full px-1.5 text-[10px] font-semibold ${critical ? 'bg-critical text-white' : 'bg-warning text-ink'}`}
+      aria-label={`${open.length} open alerts`}
+    >
+      {open.length}
+    </span>
+  )
+}
 
 export default function Layout() {
   const { search } = useLocation()
@@ -38,6 +55,7 @@ export default function Layout() {
                     }
                   >
                     {n.label}
+                    {n.to === '/watch' && <OpenAlerts />}
                   </NavLink>
                 ) : (
                   <span

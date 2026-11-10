@@ -12,6 +12,7 @@ const Process = lazy(() => import('./pages/Process'))
 const Knowledge = lazy(() => import('./pages/Knowledge'))
 const Investigate = lazy(() => import('./pages/Investigate'))
 const Actions = lazy(() => import('./pages/Actions'))
+const Watch = lazy(() => import('./pages/Watch'))
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, refetchOnWindowFocus: false, retry: 1 } },
@@ -21,13 +22,14 @@ const router = createBrowserRouter([
   {
     element: <Layout />,
     children: [
-      { index: true, element: <Navigate to="/overview" replace /> },
+      { index: true, element: <Navigate to="/watch" replace /> },
+      { path: 'watch', element: <Suspense><Watch /></Suspense> },
       { path: 'overview', element: <Suspense><Overview /></Suspense> },
       { path: 'process', element: <Suspense><Process /></Suspense> },
       { path: 'knowledge', element: <Suspense><Knowledge /></Suspense> },
       { path: 'investigate', element: <Suspense><Investigate /></Suspense> },
       { path: 'actions', element: <Suspense><Actions /></Suspense> },
-      { path: '*', element: <Navigate to="/overview" replace /> },
+      { path: '*', element: <Navigate to="/watch" replace /> },
     ],
   },
 ])
