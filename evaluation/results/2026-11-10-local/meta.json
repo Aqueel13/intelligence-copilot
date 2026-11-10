@@ -1,0 +1,19 @@
+{
+  "started": "2026-11-10T14:23:19",
+  "database": "watchdog_eval",
+  "models": [
+    "ollama:qwen2.5:7b"
+  ],
+  "seeds": [
+    42,
+    7,
+    1234
+  ],
+  "suites": [
+    "investigation",
+    "qa",
+    "retrieval",
+    "whatif"
+  ],
+  "finished": "2026-11-10T14:38:06"
+}

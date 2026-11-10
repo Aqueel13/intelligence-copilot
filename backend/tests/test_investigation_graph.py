@@ -258,3 +258,53 @@ def test_dangling_list_lead_in_is_removed() -> None:
     text = "Breaches are 84% with it vs 14% without. The key points are as follows:"
     assert _tidy_reasoning(text) == "Breaches are 84% with it vs 14% without."
     assert _tidy_reasoning("Fine as is.") == "Fine as is."
+
+
+# --- structured output: malformed model output is retried, real errors are not -------------
+
+
+class _ProviderError(Exception):
+    def __init__(self, status_code: int, message: str):
+        self.status_code = status_code
+        super().__init__(message)
+
+
+class _MethodModel:
+    """Fails with a given error for json_schema; answers correctly via function_calling."""
+
+    def __init__(self, error: Exception):
+        self.error = error
+        self.methods: list[str] = []
+
+    def with_structured_output(self, schema, method=None):
+        outer = self
+
+        class R:
+            def invoke(self, messages):
+                outer.methods.append(method)
+                if method == "json_schema":
+                    raise outer.error
+                return schema(route="metric")
+
+        return R()
+
+
+def test_malformed_output_falls_back_to_tool_calling() -> None:
+    model = _MethodModel(_ProviderError(400, "{'code': 'json_validate_failed'}"))
+    out = llm.structured(model, llm.RouteOut, "s", "u")
+    assert out.route == "metric"
+    assert model.methods == ["json_schema", "json_schema", "function_calling"]
+
+
+def test_evaluation_never_records_provider_account_ids() -> None:
+    from watchdog_backend.evaluation.suites import _redact
+
+    msg = "Rate limit reached for model `x` in organization `org_0123456789abcdefghijklmn`"
+    assert "org_0123" not in _redact(msg) and "org_<redacted>" in _redact(msg)
+
+
+def test_real_errors_are_not_retried() -> None:
+    model = _MethodModel(_ProviderError(401, "Invalid API Key"))
+    with pytest.raises(_ProviderError):
+        llm.structured(model, llm.RouteOut, "s", "u")
+    assert model.methods == ["json_schema"]

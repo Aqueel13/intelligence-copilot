@@ -82,6 +82,7 @@ class EvidenceContext:
         retriever: Retriever,
         dimension_values: dict[str, list[str]],
         targets: dict[str, float],
+        population: Frames | None = None,
     ) -> None:
         self.conn = conn
         self.frames = frames
@@ -89,6 +90,9 @@ class EvidenceContext:
         self.retriever = retriever
         self.dimension_values = dimension_values
         self.targets = targets  # activity -> wait target (hours), from the domain pack
+        # Unscoped data, when the investigation is scoped: lets "why are BROKER claims…?"
+        # compare broker claims with everyone else instead of with nothing.
+        self.population = population
 
 
 def run_check(ctx: EvidenceContext, check: Check, auto: bool = False) -> EvidenceItem:
@@ -124,6 +128,12 @@ def _segment(ctx: EvidenceContext, c: SegmentCheck, auto: bool) -> EvidenceItem:
         )
     df = ctx.frames.cases.assign(_y=ctx.frames.cases[c.outcome].astype(float))
     mask = df[c.dimension] == c.value
+    versus = "the rest"
+    if mask.all() and ctx.population is not None:
+        # The scope IS this segment: compare it with all claims outside the scope instead.
+        df = ctx.population.cases.assign(_y=ctx.population.cases[c.outcome].astype(float))
+        mask = df[c.dimension] == c.value
+        versus = "all other claims (outside this scope)"
     cmp = compare_proportions(mask, df["_y"], f"{c.dimension}={c.value}")
     controls = [
         stratified_difference(df, mask, "_y", ctl, f"{c.dimension}={c.value}")
@@ -135,7 +145,7 @@ def _segment(ctx: EvidenceContext, c: SegmentCheck, auto: bool) -> EvidenceItem:
     sample = f" Small sample: only {cmp.n_in} cases." if cmp.low_sample else ""
     parts = [
         f"{label[0].upper()}{label[1:]}: {cmp.rate_in:.1%} for {c.dimension}='{c.value}' "
-        f"(n={cmp.n_in}) vs {cmp.rate_out:.1%} for the rest (n={cmp.n_out}); difference "
+        f"(n={cmp.n_in}) vs {cmp.rate_out:.1%} for {versus} (n={cmp.n_out}); difference "
         f"{cmp.difference:+.1%}, {sig} (p={cmp.p_value:.3g}).{sample}"
     ]
     parts += [ctl.note for ctl in controls]

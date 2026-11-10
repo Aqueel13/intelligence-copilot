@@ -238,3 +238,28 @@ def test_provider_errors_become_clear_502s(client, monkeypatch, status, expected
 def test_upload_rejects_unsupported_type(client) -> None:
     r = client.post("/api/knowledge/documents", files={"file": ("x.exe", b"MZ", "application/x")})
     assert r.status_code == 422
+
+
+def test_a_hung_model_fails_within_the_deadline(conn, retriever, monkeypatch) -> None:
+    import time as _time
+
+    from watchdog_backend.config import get_settings
+    from watchdog_backend.llm.gateway import LLMCallError
+
+    monkeypatch.setattr(get_settings(), "llm_call_deadline_seconds", 1.0)
+
+    class Hung(FakeListChatModel):
+        def invoke(self, *args, **kwargs):
+            _time.sleep(30)  # a server that streams a token a minute never trips read timeouts
+
+    started = _time.perf_counter()
+    with pytest.raises(LLMCallError, match="did not finish within 1 s"):
+        answer_question(
+            conn,
+            retriever,
+            Hung(responses=["x"]),
+            "slow:model",
+            "What is the QA target?",
+            get_reranker(),
+        )
+    assert _time.perf_counter() - started < 5

@@ -8,8 +8,11 @@ Callers ask for a role (`get_chat_model("answer")`), never a provider, so swappi
 configuration only. Every call site gets the model's identity back for logging/evaluation.
 """
 
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeout
 from dataclasses import dataclass
 from functools import lru_cache
+from typing import Any
 
 from langchain_core.language_models import BaseChatModel
 
@@ -44,10 +47,29 @@ def describe_provider_error(exc: BaseException) -> str:
     }
     if status in hints:
         return hints[status]
+    if isinstance(exc, TimeoutError) and "did not finish" in str(exc):
+        return f"{exc}; the model server may be overloaded or hung"
     if isinstance(exc, (ConnectionError, TimeoutError, OSError)) or "connect" in str(exc).lower():
         return f"could not reach the model server ({type(exc).__name__})"
     message = getattr(exc, "message", None) or str(exc)
     return f"{type(exc).__name__}: {message[:200]}"
+
+
+_DEADLINE_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="llm-deadline")
+
+
+def invoke_with_deadline(runnable: Any, payload: Any, model_id: str = "model") -> Any:
+    """Invoke with a WALL-CLOCK deadline. Provider timeouts are per read; a degraded server
+    that streams one token a minute never trips them and can stall a request for many
+    minutes. On expiry the call is abandoned (its thread finishes in the background) and a
+    TimeoutError is raised, which callers report as a model failure."""
+    seconds = get_settings().llm_call_deadline_seconds
+    future = _DEADLINE_POOL.submit(runnable.invoke, payload)
+    try:
+        return future.result(timeout=seconds)
+    except FuturesTimeout as exc:
+        future.cancel()
+        raise TimeoutError(f"{model_id} did not finish within {seconds:.0f} s") from exc
 
 
 @dataclass(frozen=True)
@@ -96,7 +118,7 @@ def build_chat_model(spec: ModelSpec, temperature: float = 0.0) -> BaseChatModel
             api_key=s.groq_api_key,
             temperature=temperature,
             timeout=s.llm_timeout_seconds,
-            max_retries=2,
+            max_retries=s.llm_max_retries,
         )
     if not s.gemini_api_key:
         raise LLMConfigError("GEMINI_API_KEY is not set")
@@ -107,7 +129,7 @@ def build_chat_model(spec: ModelSpec, temperature: float = 0.0) -> BaseChatModel
         google_api_key=s.gemini_api_key,
         temperature=temperature,
         timeout=s.llm_timeout_seconds,
-        max_retries=2,
+        max_retries=s.llm_max_retries,
     )
 
 

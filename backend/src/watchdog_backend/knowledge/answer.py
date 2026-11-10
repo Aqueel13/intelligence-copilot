@@ -26,7 +26,7 @@ from watchdog_backend.knowledge.retrieval import (
     Retriever,
     SearchFilters,
 )
-from watchdog_backend.llm.gateway import LLMCallError
+from watchdog_backend.llm.gateway import LLMCallError, invoke_with_deadline
 
 NOT_FOUND = "NOT_IN_SOURCES"
 _CITATION = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
@@ -187,11 +187,13 @@ def answer_question(
 
     started = time.perf_counter()
     try:
-        reply = model.invoke(
+        reply = invoke_with_deadline(
+            model,
             [
                 SystemMessage(SYSTEM_PROMPT),
                 HumanMessage(f"Sources:\n\n{format_sources(chunks)}\n\nQuestion: {question}"),
-            ]
+            ],
+            model_id,
         )
     except Exception as exc:  # any provider/SDK failure becomes one well-described error
         raise LLMCallError(model_id, exc) from exc

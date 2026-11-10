@@ -57,6 +57,8 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 | D32 | **Follow-ups close the loop** | Each catalogue action names the metric it should move and a target; after execution the Watch layer compares before vs after and reports on target / improving / no change / worse. |
 | D33 | **"Simulate next month" is a labelled demo device** | The historical data ends in September, so the same generator appends a synthetic month with executed actions applied (trends continue). Recorded in `simulated_months`; `make seed` resets it. |
 | D34 | **Per-case activity counts are materialized** | Postgres cannot estimate selectivity of JSONB-attribute filters; for narrow filters it chose a plan that re-aggregated all events per case (a 2-second query took ~5 minutes). An indexed materialized view, refreshed by the loader, makes every plan cheap. |
+| D35 | **Evaluation in an isolated database, scored against planted truth** | `python -m watchdog_backend.evaluation` reloads `<db>_eval` per generator seed and runs four suites (investigations, grounded Q&A, retrieval, what-if). Results are appended per run, merged across runs (later re-runs replace earlier results, which stay listed), and written to `docs/evaluation_report.md`. Rate-limited runs are reported separately from model failures; provider account ids are redacted. |
+| D36 | **JSON-schema structured output by default, wall-clock LLM deadlines** | Found by the evaluation: tool calling failed on two Groq models (JSON schema 3/3), and a slowly streaming server could stall a run for minutes. |
 
 ## 4. Product shape
 
@@ -256,6 +258,19 @@ Closed loop on the dev data: delegation and Team B retraining were executed in M
 | Senior Approval wait, ₹2L–₹5L | ~111 h | 14.7 h | delegation follow-up on target (≤ 24 h) |
 | Senior Approval wait, all | 130 h | 37.7 h | still critical: claims above ₹5L still queue |
 | Broker documents | 22.8% | 26.5% | still critical: no action taken yet |
+
+### M7 results (2026-11-10): see `docs/evaluation_report.md`
+
+54 investigations (4 models × 3 seeds × 3 questions; 5 refused by Groq's free daily quota), 132 policy answers, retrieval and what-if suites.
+
+| Model | Investigations completed | Mean recall | Decoys accepted | Model's own citation accuracy |
+|---|---|---|---|---|
+| `ollama:qwen2.5:7b` (local, free) | 9/9 | 100% | 0 | 75% |
+| `groq:openai/gpt-oss-20b` | 7/9 | 100% | 0 | 69% |
+| `groq:qwen/qwen3.8-27b` | 9/9 | 97% | 0 | 97% |
+| `groq:openai/gpt-oss-120b` | 6/9 | 79% | 0 | 73% |
+
+No model accepted a decoy in any run. Every miss was over-caution (a supported cause left inconclusive or wrongly refuted), which the overrides do not yet catch because they only downgrade verdicts. Unverified numbers in summaries: 0 across all completed runs. Pending: re-run the cloud models' broker question (predates a what-if fix) and the five quota-refused runs.
 
 ## 10. Open questions
 

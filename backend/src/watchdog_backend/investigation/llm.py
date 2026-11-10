@@ -6,6 +6,8 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, ValidationError
 
+from watchdog_backend.llm.gateway import invoke_with_deadline
+
 
 class RouteOut(BaseModel):
     route: Literal["investigation", "metric", "policy"] = Field(
@@ -63,28 +65,45 @@ class RecommendOut(BaseModel):
     selections: list[SelectionOut]
 
 
+def _malformed_output(exc: Exception) -> bool:
+    """The provider rejected the MODEL'S output (bad tool call / invalid JSON), not our request.
+    Groq reports these as 400 with code tool_use_failed or json_validate_failed."""
+    if isinstance(exc, (ValidationError, ValueError, TypeError)):
+        return True
+    text = str(exc)
+    return getattr(exc, "status_code", None) == 400 and (
+        "tool_use_failed" in text or "json_validate_failed" in text
+    )
+
+
 def structured[T: BaseModel](
     model: BaseChatModel, schema: type[T], system: str, user: str, retries: int = 1
 ) -> T:
-    """Call the model for a structured answer; retry once with the validation error."""
-    from langchain_ollama import ChatOllama
+    """Call the model for a structured answer.
 
-    method = "json_schema" if isinstance(model, ChatOllama) else "function_calling"
-    runnable = model.with_structured_output(schema, method=method)
+    JSON-schema output is the default for every provider: in testing it was reliable where
+    tool calling was not (gpt-oss-20b skipped the tool; qwen3 sent invalid tool arguments).
+    A malformed answer is retried with the error fed back; the last attempt switches to tool
+    calling, so a model that is weak at one method still has a chance with the other.
+    """
+    methods = ["json_schema"] * (retries + 1) + ["function_calling"]
     messages = [SystemMessage(system), HumanMessage(user)]
     last: Exception | None = None
-    for _ in range(retries + 1):
+    for method in methods:
+        runnable = model.with_structured_output(schema, method=method)
         try:
-            out = runnable.invoke(messages)
-            if isinstance(out, schema):
-                return out
-            return schema.model_validate(out)
-        except (ValidationError, ValueError, TypeError) as exc:
+            out = invoke_with_deadline(runnable, messages)
+            if out is None:
+                raise ValueError("empty structured output")
+            return out if isinstance(out, schema) else schema.model_validate(out)
+        except Exception as exc:
+            if not _malformed_output(exc):
+                raise  # auth, rate limit after retries, timeout: not fixable by asking again
             last = exc
             messages = [
                 *messages,
                 HumanMessage(
-                    f"Your previous answer was invalid: {exc}. "
+                    f"Your previous answer was invalid: {str(exc)[:300]}. "
                     "Answer again using exactly the schema."
                 ),
             ]
@@ -139,5 +158,5 @@ year" figures distinct, and write money as given (₹ lakh). Do not use bullet p
 
 
 def plain(model: BaseChatModel, system: str, user: str) -> str:
-    reply = model.invoke([SystemMessage(system), HumanMessage(user)])
+    reply = invoke_with_deadline(model, [SystemMessage(system), HumanMessage(user)])
     return reply.content if isinstance(reply.content, str) else str(reply.content)

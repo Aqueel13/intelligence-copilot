@@ -58,3 +58,7 @@ allowed-confusables = ["–", "×", "›"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.ruff.lint.per-file-ignores]
+# Markdown table rows read better unwrapped in the report template.
+"src/watchdog_backend/evaluation/report.py" = ["E501"]

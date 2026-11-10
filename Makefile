@@ -1,4 +1,4 @@
-.PHONY: secrets watch up down logs ps test lint fmt check migrate data knowledge seed psql reset-db
+.PHONY: secrets watch eval eval-report up down logs ps test lint fmt check migrate data knowledge seed psql reset-db
 
 secrets:       ## Add any missing generated secrets to .env (never overwrites existing ones)
 	@for k in OPERATIONS_MCP_BACKEND_TOKEN OPERATIONS_MCP_EXTERNAL_TOKEN ENTERPRISE_API_KEY; do \
@@ -33,6 +33,13 @@ eval-retrieval: ## Retrieval benchmark (no LLM): hit@k and MRR per method
 
 watch:         ## Evaluate the KPI monitors once and update alerts
 	cd backend && uv run python -m watchdog_backend.watch
+
+eval:          ## Full evaluation (isolated <db>_eval database). MODELS / SEEDS overridable
+	cd backend && uv run python -m watchdog_backend.evaluation run \
+	  --models $${MODELS:-ollama:qwen2.5:7b} --seeds $${SEEDS:-42,7,1234}
+
+eval-report:   ## Rebuild docs/evaluation_report.md from all saved evaluation runs
+	cd backend && uv run python -m watchdog_backend.evaluation report $$(ls -d ../evaluation/results/2*/ | sort)
 
 test:          ## Run backend tests (needs the stack's Postgres running)
 	cd backend && uv run pytest

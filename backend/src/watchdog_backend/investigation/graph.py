@@ -41,7 +41,7 @@ from watchdog_backend.investigation.evidence import (
     run_check,
 )
 from watchdog_backend.investigation.policy_refs import PolicyClause, resolve
-from watchdog_backend.investigation.scan import Overview, Signal, scan
+from watchdog_backend.investigation.scan import Overview, Signal, scan, segment_signals
 from watchdog_backend.investigation.verify import NumberCheck, verify_numbers
 from watchdog_backend.knowledge.answer import Answer, answer_question
 from watchdog_backend.knowledge.models import Reranker
@@ -230,6 +230,17 @@ def build_graph(deps: Deps):
             scope = _scope(state)
             cache["frames"] = load_frames(deps.conn, deps.metrics, scope)
             cache["activities"] = analyzer.activities(deps.conn, scope)
+            # A scoped question ("why are BROKER claims…") needs the rest of the business as
+            # its comparison group; the same period, without the dimension filters.
+            cache["population"] = (
+                load_frames(
+                    deps.conn,
+                    deps.metrics,
+                    ProcessQuery(period_from=scope.period_from, period_to=scope.period_to),
+                )
+                if scope.filters
+                else None
+            )
         return cache["frames"], cache["activities"]
 
     # -- route -------------------------------------------------------------------------
@@ -279,7 +290,23 @@ def build_graph(deps: Deps):
     def scan_node(state: InvestigationState) -> dict:
         frames, activities = frames_and_activities(state)
         result = scan(frames, activities, DIMENSIONS)
-        return {"overview": result.overview, "signals": result.signals}
+        signals = list(result.signals)
+        population = cache["population"]
+        if population is not None:  # how does the scope compare with everyone else?
+            for dim, values in _scope(state).filters.items():
+                if dim in DIMENSIONS and len(values) == 1:
+                    signals += [
+                        sig.model_copy(
+                            update={
+                                "statement": f"Compared with the rest of the "
+                                f"business: {sig.statement}"
+                            }
+                        )
+                        for sig in segment_signals(population, [dim])
+                        if sig.data["value"] == values[0]
+                    ]
+            signals.sort(key=lambda sig: sig.strength, reverse=True)
+        return {"overview": result.overview, "signals": signals}
 
     def plan(state: InvestigationState) -> dict:
         model, _ = deps.model("planner")
@@ -347,7 +374,15 @@ def build_graph(deps: Deps):
     def gather(state: InvestigationState) -> dict:
         frames, activities = frames_and_activities(state)
         values = {d: sorted(map(str, frames.cases[d].dropna().unique())) for d in DIMENSIONS}
-        ctx = EvidenceContext(deps.conn, frames, activities, deps.retriever, values, targets)
+        ctx = EvidenceContext(
+            deps.conn,
+            frames,
+            activities,
+            deps.retriever,
+            values,
+            targets,
+            population=cache["population"],
+        )
         hypotheses = []
         for h in state["hypotheses"]:
             evidence = [run_check(ctx, c) for c in h.checks]
@@ -402,7 +437,7 @@ def build_graph(deps: Deps):
         frames, _ = frames_and_activities(state)
         supported = [h for h in state["hypotheses"] if h.verdict == "supported"]
         impacts = {
-            a.id: evaluate_action(frames, a, catalogue.economics)
+            a.id: evaluate_action(frames, a, catalogue.economics, cache["population"])
             for a in catalogue.actions.values()
         }
         chosen: dict[str, llm.SelectionOut] = {}

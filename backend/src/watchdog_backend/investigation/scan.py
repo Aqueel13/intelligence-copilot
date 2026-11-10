@@ -54,7 +54,7 @@ class ScanResult(BaseModel):
     signals: list[Signal]
 
 
-def _segment_signals(frames: Frames, dimensions: list[str]) -> list[Signal]:
+def segment_signals(frames: Frames, dimensions: list[str]) -> list[Signal]:
     cases = frames.cases
     out: list[Signal] = []
     for outcome, label in OUTCOMES.items():
@@ -192,7 +192,7 @@ def scan(frames: Frames, activities: ActivityAnalysis, dimensions: list[str]) ->
     cases = frames.cases
     signals = (
         _bottleneck_signals(activities)
-        + _segment_signals(frames, dimensions)
+        + segment_signals(frames, dimensions)
         + _weekday_signals(frames)
         + _trend_signal(frames)
     )

@@ -124,20 +124,34 @@ def _case_mask(cases: pd.DataFrame, filters: dict[str, list[str]]) -> pd.Series:
     return mask
 
 
-def _excess_fraction(frames: Frames, lever: Lever, outcome: str) -> float:
-    """Share of the segment's loops above the rate seen in comparable claims."""
+def _excess_fraction(
+    frames: Frames, lever: Lever, outcome: str, population: Frames | None = None
+) -> float:
+    """Share of the segment's loops above the rate seen in comparable claims.
+
+    If the scope IS the segment (e.g. a broker-only investigation valuing a broker action),
+    there are no comparable claims in scope; the baseline then comes from the population.
+    Without one, the excess is unknown and reported as 0 rather than guessed."""
     if lever.fraction == "all" or not lever.baseline_dimension:
         return 1.0
     cases = frames.cases
     seg = _case_mask(cases, lever.filters)
     rate_in = cases.loc[seg, outcome].mean()
-    rate_base = cases.loc[~seg, outcome].mean()
-    if not rate_in or pd.isna(rate_in):
+    if not seg.all():
+        rate_base = cases.loc[~seg, outcome].mean()
+    elif population is not None:
+        pop = population.cases
+        rate_base = pop.loc[~_case_mask(pop, lever.filters), outcome].mean()
+    else:
+        return 0.0
+    if not rate_in or pd.isna(rate_in) or pd.isna(rate_base):
         return 0.0
     return float(max(0.0, (rate_in - rate_base) / rate_in))
 
 
-def removed_hours(frames: Frames, lever: Lever) -> tuple[pd.Series, float]:
+def removed_hours(
+    frames: Frames, lever: Lever, population: Frames | None = None
+) -> tuple[pd.Series, float]:
     """Hours removed per case (index = case_id), and the fraction applied."""
     ev, cases = frames.events, frames.cases
     in_scope = set(cases.loc[_case_mask(cases, lever.filters), "case_id"])
@@ -155,7 +169,7 @@ def removed_hours(frames: Frames, lever: Lever) -> tuple[pd.Series, float]:
         ]
         hours = (sel["wait_hours"] + sel["work_hours"]).groupby(sel["case_id"]).sum()
         outcome = "doc_requested" if lever.always else "rework"
-        return hours, _excess_fraction(frames, lever, outcome)
+        return hours, _excess_fraction(frames, lever, outcome, population)
 
     # cap_handoff_wait: a late handoff on `weekday` still waits until the next working morning
     # (no weekend work is assumed), but then only for a typical queue: the backlog that builds
@@ -175,9 +189,11 @@ def removed_hours(frames: Frames, lever: Lever) -> tuple[pd.Series, float]:
     return cut.groupby(sel["case_id"]).sum(), 1.0
 
 
-def evaluate_action(frames: Frames, action: Action, economics: Economics) -> ActionImpact:
+def evaluate_action(
+    frames: Frames, action: Action, economics: Economics, population: Frames | None = None
+) -> ActionImpact:
     cases = frames.cases.set_index("case_id")
-    hours, fraction = removed_hours(frames, action.lever)
+    hours, fraction = removed_hours(frames, action.lever, population)
     hours = hours.reindex(cases.index, fill_value=0.0)
     breached = cases["cycle_hours"] > frames.sla_hours
     fixed = breached & (cases["cycle_hours"] - hours <= frames.sla_hours)

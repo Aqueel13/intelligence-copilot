@@ -31,3 +31,6 @@ datasets/generated/
 !.vscode/extensions.json
 .idea/
 .DS_Store
+
+# Evaluation smoke runs (real results under evaluation/results/ are committed)
+evaluation/results/smoke*/

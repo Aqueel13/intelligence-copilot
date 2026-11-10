@@ -35,7 +35,9 @@ class Settings(BaseSettings):
     # `llm_models` maps a role (e.g. "answer", "planner") to a model; others use the default.
     llm_default_model: str = "ollama:qwen2.5:7b"
     llm_models: dict[str, str] = {}
-    llm_timeout_seconds: float = 90.0
+    llm_timeout_seconds: float = 90.0  # per read (resets with every streamed token)
+    llm_call_deadline_seconds: float = 180.0  # wall clock for a whole call
+    llm_max_retries: int = 2  # provider-level retries (rate limits honour Retry-After)
     ollama_base_url: str = "http://localhost:11434"
     groq_api_key: str | None = None
     gemini_api_key: str | None = None

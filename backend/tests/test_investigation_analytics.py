@@ -124,3 +124,47 @@ def test_numbers_from_the_facts_are_verified() -> None:
 def test_invented_numbers_and_wrong_units_are_flagged() -> None:
     check = verify_numbers("Hiring 20% more staff saves ₹12.3 crore and 220 claims.", FACTS)
     assert set(check.unverified) == {"20%", "₹12.3 crore", "220"}
+
+
+# --- scoped investigations compare the scope with the rest of the business ------------
+
+
+def test_scoped_segment_check_uses_the_population(db_engine, pack, activities) -> None:
+    from watchdog_backend.investigation.evidence import EvidenceContext, SegmentCheck, run_check
+    from watchdog_backend.knowledge.service import get_retriever
+
+    engine = MetricsEngine(pack)
+    scope = ProcessQuery(filters={"channel": ["broker"]})
+    with db_engine.connect() as c:
+        scoped = load_frames(c, engine, scope)
+        population = load_frames(c, engine, ProcessQuery())
+        ctx = EvidenceContext(
+            c,
+            scoped,
+            activities,
+            get_retriever(),
+            {"channel": ["broker"]},
+            {},
+            population=population,
+        )
+        alone = EvidenceContext(c, scoped, activities, get_retriever(), {"channel": ["broker"]}, {})
+        check = SegmentCheck(dimension="channel", value="broker", outcome="doc_requested")
+        with_population = run_check(ctx, check)
+        without = run_check(alone, check)
+    assert "outside this scope" in with_population.summary
+    assert with_population.data["significant"] and with_population.data["difference"] > 0.1
+    assert not without.data["significant"]  # inside the scope there is nothing to compare with
+
+
+def test_scoped_what_if_uses_the_population_baseline(db_engine, pack) -> None:
+    engine = MetricsEngine(pack)
+    with db_engine.connect() as c:
+        broker = load_frames(c, engine, ProcessQuery(filters={"channel": ["broker"]}))
+        population = load_frames(c, engine, ProcessQuery())
+    cat = get_catalogue()
+    action = cat.actions["enforce_broker_checklist"]
+    alone = evaluate_action(broker, action, cat.economics)
+    scoped = evaluate_action(broker, action, cat.economics, population)
+    full = evaluate_action(population, action, cat.economics)
+    assert alone.breaches_avoided == 0  # no baseline inside the scope: unknown, not guessed
+    assert scoped.breaches_avoided == pytest.approx(full.breaches_avoided, rel=0.01)

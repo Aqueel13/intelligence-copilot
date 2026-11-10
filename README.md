@@ -4,7 +4,7 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 
 **Watch → Investigate → Recommend → Act**
 
-> Status: **M6 — watch: monitors, alerts and follow-ups.** See [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md) for scope, decisions and milestones.
+> Status: **M7 — evaluated.** Results in [`docs/evaluation_report.md`](docs/evaluation_report.md). See [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md) for scope, decisions and milestones.
 
 ## Design principles
 
@@ -35,7 +35,7 @@ make seed                     # generate 5,000 synthetic claims and ingest the p
 | Health | http://localhost:8000/api/health |
 | Metric catalogue | http://localhost:8000/api/metrics |
 
-Other commands: `make watch` (evaluate monitors now), `make test`, `make lint`, `make check` (everything CI runs), `make eval-retrieval`, `make psql`, `make logs`, `make down`. The `watcher` service evaluates monitors every hour (`WATCH_INTERVAL_SECONDS`).
+Other commands: `make eval` / `make eval-report` (evaluation), `make watch` (evaluate monitors now), `make test`, `make lint`, `make check` (everything CI runs), `make eval-retrieval`, `make psql`, `make logs`, `make down`. The `watcher` service evaluates monitors every hour (`WATCH_INTERVAL_SECONDS`).
 
 The LLM defaults to a local model through [Ollama](https://ollama.com) (`ollama pull qwen2.5:7b`). Set `LLM_DEFAULT_MODEL` / `LLM_MODELS` in `.env` to use Groq or Gemini instead.
 
@@ -65,6 +65,8 @@ backend/       FastAPI app (src/watchdog_backend), Alembic migrations, tests
                   with confounder overrides, what-if valuation and number verification
   governance/  action rules (roles, separation of duties, approve-before-execute), audit chain
   watch/       KPI monitors, alerts, action follow-ups, next-month simulator (demo)
+  evaluation/  evaluation harness: investigations vs planted truth, Q&A, retrieval, what-if
+evaluation/    saved evaluation runs (results.jsonl per run) and notes on fixes they triggered
   mcp_servers/ Operations MCP server (governed actions for any MCP client)
   enterprise_mock/  stand-in for the client's claims administration system
 domain_packs/  per-industry configuration (process, dimensions, rules, metrics, monitors,

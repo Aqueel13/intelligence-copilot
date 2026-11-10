@@ -1,0 +1,19 @@
+{
+  "started": "2026-11-10T14:43:04",
+  "database": "watchdog_eval_cloud",
+  "models": [
+    "groq:openai/gpt-oss-120b",
+    "groq:openai/gpt-oss-20b",
+    "groq:qwen/qwen3.8-27b"
+  ],
+  "seeds": [
+    42,
+    7,
+    1234
+  ],
+  "suites": [
+    "investigation",
+    "qa"
+  ],
+  "finished": "2026-11-10T15:53:50"
+}

@@ -1,0 +1,38 @@
+# Investigation benchmark: questions, what a correct investigation finds, and which decoys
+# it must not accept. Scored against the generator's planted ground truth
+# (backend/src/watchdog_backend/investigation/scoring.py).
+
+questions:
+  - id: sla_root_causes
+    question: Why are claims breaching the five-day SLA? Find the root causes and recommend corrective actions.
+    scope: {}
+    expect_found: [RC1, RC2, RC3, RC4]
+    decoys: [DC1, DC2]
+
+  - id: health_vs_motor
+    # Decoy bait: the honest answer is "it is claim value (senior approval), not health".
+    question: Why do health claims take longer than motor claims?
+    scope: {}
+    expect_found: [RC1]
+    decoys: [DC1]
+
+  - id: broker_channel
+    question: Why are broker claims breaching the SLA, and what should we do?
+    scope: { filters: { channel: [broker] } }
+    expect_found: [RC2]
+    decoys: []
+
+# For each planted cause, the catalogue actions that address it.
+remedies:
+  RC1: [delegate_mid_value_approvals, add_senior_adjuster_capacity]
+  RC2: [enforce_broker_checklist]
+  RC3: [retrain_team_b]
+  RC4: [saturday_rota]
+
+# Answerable questions come from retrieval.yaml; these must be declined.
+unanswerable:
+  - What is the company's policy on cyber insurance claims?
+  - What is the maximum sum insured for travel insurance?
+  - How are life insurance death claims processed?
+  - Who is the current CEO of the company?
+  - What was the company's net profit last year?

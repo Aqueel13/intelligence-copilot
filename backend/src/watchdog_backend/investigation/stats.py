@@ -88,8 +88,9 @@ def stratified_difference(
         )
     adjusted = float(sum(d * w for d, w in zip(diffs, weights, strict=True)) / sum(weights))
     explained = abs(raw) >= 0.02 and (adjusted * raw <= 0 or abs(adjusted) < abs(raw) / 3)
-    note = f"Within the same {control}, the difference falls from {raw:+.1%} to {adjusted:+.1%}" + (
-        f": it is mostly explained by {control}." if explained else ": it persists."
+    note = (
+        f"Within the same {control}, the difference is {adjusted:+.1%} (vs {raw:+.1%} overall)"
+        + (f": it is mostly explained by {control}." if explained else ": it persists.")
     )
     return StratifiedComparison(
         segment=segment,
