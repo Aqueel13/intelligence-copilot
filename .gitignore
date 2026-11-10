@@ -2,6 +2,12 @@
 .env
 .env.*
 !.env.example
+# Editor swap/backup files (a swap file of .env can contain secrets)
+*.swp
+*.swo
+.*.sw?
+*~
+\#*\#
 
 # Python
 __pycache__/
