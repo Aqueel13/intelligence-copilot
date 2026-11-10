@@ -22,6 +22,40 @@ questions:
     expect_found: [RC2]
     decoys: []
 
+# What counts as evidence for each planted cause (RC…) or decoy (DC…). A cause is found when a
+# supported hypothesis carries evidence matching one of its targets; a decoy is accepted when a
+# supported hypothesis's only targets are the decoy's.
+ground_truth:
+  RC1:
+    label: Senior approval queue
+    targets:
+      - { check: activity_wait, activity: Senior Approval }
+      - { check: segment, dimension: amount_band, values: ["₹2L–₹5L", "> ₹5L"] }
+  RC2:
+    label: Broker documents
+    targets: [{ check: segment, dimension: channel, values: [broker] }]
+  RC3:
+    label: Team B rework
+    targets: [{ check: segment, dimension: team, values: [Team B] }]
+  RC4:
+    label: Friday backlog
+    targets: [{ check: weekday_handoff, weekday: Fri }]
+  DC1:
+    label: Health looks slower (it is claim value)
+    targets: [{ check: segment, dimension: line_of_business, values: [health], outcome: breached }]
+  DC2:
+    label: Pune looks worse (small, broker-heavy)
+    targets: [{ check: segment, dimension: region, values: [Pune] }]
+
+# What-if check: each catalogue action's estimate is compared with an exact counterfactual from
+# the generator's ground-truth summary (path of keys into ground_truth.json).
+whatif_truth:
+  delegate_mid_value_approvals: [delegation_scenario, breaches_avoided]
+  add_senior_adjuster_capacity: [root_causes, RC1, breaches_attributable]
+  enforce_broker_checklist: [root_causes, RC2, breaches_attributable]
+  retrain_team_b: [root_causes, RC3, breaches_attributable]
+  saturday_rota: [root_causes, RC4, breaches_attributable]
+
 # For each planted cause, the catalogue actions that address it.
 remedies:
   RC1: [delegate_mid_value_approvals, add_senior_adjuster_capacity]

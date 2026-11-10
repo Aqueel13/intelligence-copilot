@@ -5,6 +5,9 @@ because metric expressions and dimension names end up inside SQL.
 """
 
 import re
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -22,10 +25,15 @@ class _Strict(BaseModel):
 
 
 class CaseConfig(_Strict):
-    label: str
+    label: str  # what one case is called ("claim", "invoice")
+    plural: str | None = None  # defaults to label + "s"
     id_prefix: str
     currency: str
     timezone: str
+
+    @property
+    def labels(self) -> str:
+        return self.plural or f"{self.label}s"
 
 
 class SlaConfig(_Strict):
@@ -98,6 +106,62 @@ class FeedbackConfig(_Strict):
     nps_scale: tuple[int, int]
 
 
+class Outcome(_Strict):
+    """A case-level flag the investigation compares across segments (besides `breached`):
+    a loop or detour, read from per-case activity counts."""
+
+    label: str  # rate label, e.g. "additional-documents rate"
+    mechanism: str  # noun phrase, e.g. "an additional-documents request"
+    activity: str
+    when: Literal["present", "repeated"]  # the activity occurs at all / more than once
+
+
+class AnalysisConfig(_Strict):
+    """What the investigation engine looks at. Everything domain-specific it needs is here."""
+
+    dimensions: list[str]  # scanned for segment effects
+    controls: list[str]  # confounders checked for every segment effect
+    outcomes: dict[str, Outcome] = Field(default_factory=dict)
+    wait_targets: dict[str, float] = Field(default_factory=dict)  # activity -> hours
+    late_handoff_hour: int = Field(15, ge=0, le=23)  # "late" handoffs start at this hour
+
+    @field_validator("outcomes")
+    @classmethod
+    def _outcome_names(cls, v: dict[str, Outcome]) -> dict[str, Outcome]:
+        for name in v:
+            if not IDENTIFIER.match(name) or name == "breached":
+                raise ValueError(
+                    f"outcome name {name!r} must be an identifier other than 'breached'"
+                )
+        return v
+
+
+class Tile(_Strict):
+    """A KPI tile on the Overview page. `note` may use {n} (the value's sample size) and
+    {secondary} (the formatted value of `secondary`, another metric)."""
+
+    metric: str
+    label: str
+    note: str | None = None
+    secondary: str | None = None
+
+
+class OverviewConfig(_Strict):
+    spotlight: Tile | None = None  # the fourth tile of the headline row
+    tiles: list[Tile] = Field(default_factory=list)  # the row under the headline
+    breakdown_dimensions: dict[str, str] = Field(default_factory=dict)  # name -> short label
+    breakdown_metrics: dict[str, str] = Field(default_factory=dict)  # metric -> short label
+
+
+class UiConfig(_Strict):
+    """Wording, examples and Overview layout for the frontend."""
+
+    investigate_examples: list[str] = Field(default_factory=list)
+    knowledge_examples: list[str] = Field(default_factory=list)
+    system_of_record: str = "the system of record"  # what executed actions change
+    overview: OverviewConfig = Field(default_factory=OverviewConfig)
+
+
 class Metric(_Strict):
     name: str
     base: Literal["cases", "events", "feedback"]
@@ -120,14 +184,18 @@ class Metric(_Strict):
 class DomainPack(_Strict):
     domain: str
     display_name: str
+    # Who and what, for LLM prompts: "an Indian general insurer's motor and health claims"
+    subject: str
     version: int
     case: CaseConfig
     sla: SlaConfig
     calendar: CalendarConfig
     dimensions: list[Dimension]
     activities: list[Activity]
-    approval: ApprovalConfig
-    feedback: FeedbackConfig
+    analysis: AnalysisConfig
+    ui: UiConfig = Field(default_factory=UiConfig)
+    approval: ApprovalConfig | None = None
+    feedback: FeedbackConfig | None = None
     metrics: dict[str, Metric]
 
     @model_validator(mode="after")
@@ -139,7 +207,33 @@ class DomainPack(_Strict):
         dims = [d.name for d in self.dimensions]
         if len(dims) != len(set(dims)):
             raise ValueError("duplicate dimension names")
+        a = self.analysis
+        for ref in [*a.dimensions, *a.controls]:
+            if ref not in dims:
+                raise ValueError(f"analysis dimension {ref!r} is not a declared dimension")
+        for ref in [*(o.activity for o in a.outcomes.values()), *a.wait_targets]:
+            if ref not in names:
+                raise ValueError(f"analysis activity {ref!r} is not a declared activity")
+        o = self.ui.overview
+        tiles = [*o.tiles, *([o.spotlight] if o.spotlight else [])]
+        for ref in [
+            *(t.metric for t in tiles),
+            *(t.secondary for t in tiles if t.secondary),
+            *o.breakdown_metrics,
+        ]:
+            if ref not in self.metrics:
+                raise ValueError(f"ui.overview metric {ref!r} is not a declared metric")
+        for ref in o.breakdown_dimensions:
+            if ref not in dims:
+                raise ValueError(f"ui.overview dimension {ref!r} is not a declared dimension")
         return self
+
+    @property
+    def outcome_labels(self) -> dict[str, str]:
+        """Every outcome the investigation compares, with its rate label."""
+        return {"breached": "SLA breach rate"} | {
+            k: o.label for k, o in self.analysis.outcomes.items()
+        }
 
     def dimension(self, name: str) -> Dimension:
         for d in self.dimensions:
@@ -155,7 +249,56 @@ def load_pack(path: Path) -> DomainPack:
     return DomainPack.model_validate(raw)
 
 
+# --------------------------------------------------------------- the active pack
+#
+# Several packs run side by side. The pack in use is per request (the API sets it from the
+# X-Domain header) or per job (the watcher, the CLIs), via this context variable. Code that
+# starts threads copies the context, so the pack follows the work.
+
+_current: ContextVar[str | None] = ContextVar("domain_pack", default=None)
+
+
+def available_domains() -> list[str]:
+    """Enabled packs (settings.domain_packs) that exist on disk, default pack first."""
+    s = get_settings()
+    root = Path(s.domain_packs_dir)
+    names = [s.domain_pack] + [d.strip() for d in s.domain_packs.split(",") if d.strip()]
+    return [d for d in dict.fromkeys(names) if (root / d / "pack.yaml").is_file()]
+
+
+def current_domain() -> str:
+    return _current.get() or get_settings().domain_pack
+
+
+@contextmanager
+def use_domain(domain: str) -> Iterator[str]:
+    """Make `domain` the active pack for the code inside the block."""
+    if domain not in available_domains():
+        raise UnknownDomainError(domain)
+    token = _current.set(domain)
+    try:
+        yield domain
+    finally:
+        _current.reset(token)
+
+
+class UnknownDomainError(ValueError):
+    def __init__(self, domain: str) -> None:
+        super().__init__(
+            f"Unknown or disabled domain pack {domain!r}. "
+            f"Available: {', '.join(available_domains())}"
+        )
+
+
 @lru_cache
+def _load(domain: str) -> DomainPack:
+    return load_pack(Path(get_settings().domain_packs_dir) / domain)
+
+
 def get_pack(domain: str | None = None) -> DomainPack:
-    settings = get_settings()
-    return load_pack(Path(settings.domain_packs_dir) / (domain or settings.domain_pack))
+    return _load(domain or current_domain())
+
+
+def pack_file(*parts: str, domain: str | None = None) -> Path:
+    """A file inside a pack's directory (the active pack by default)."""
+    return Path(get_settings().domain_packs_dir) / (domain or current_domain()) / Path(*parts)

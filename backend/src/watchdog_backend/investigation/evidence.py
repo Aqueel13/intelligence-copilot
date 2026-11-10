@@ -11,8 +11,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import Connection
 
 from watchdog_backend.analytics.process import ActivityAnalysis
+from watchdog_backend.domain.pack import get_pack
 from watchdog_backend.investigation.data import Frames
-from watchdog_backend.investigation.scan import OUTCOMES, WEEKDAY_NAMES
+from watchdog_backend.investigation.scan import WEEKDAY_NAMES, monthly_wait, trend_reason
 from watchdog_backend.investigation.stats import (
     StratifiedComparison,
     compare_proportions,
@@ -20,15 +21,12 @@ from watchdog_backend.investigation.stats import (
 )
 from watchdog_backend.knowledge.retrieval import Retriever
 
-# Dimensions used as controls when a segment effect is tested.
-CONTROLS = ("amount_band", "line_of_business", "channel")
-
 
 class SegmentCheck(BaseModel):
     type: Literal["segment"] = "segment"
     dimension: str
     value: str
-    outcome: Literal["breached", "doc_requested", "rework"] = "breached"
+    outcome: str = "breached"  # or a loop outcome declared in the pack (analysis.outcomes)
 
 
 class ActivityWaitCheck(BaseModel):
@@ -126,6 +124,14 @@ def _segment(ctx: EvidenceContext, c: SegmentCheck, auto: bool) -> EvidenceItem:
             auto=auto,
             summary=f"Unknown value '{c.value}' for {c.dimension}. Allowed: {', '.join(allowed)}",
         )
+    outcomes = ctx.frames.pack.outcome_labels
+    if c.outcome not in outcomes:
+        return EvidenceItem(
+            check=c,
+            ok=False,
+            auto=auto,
+            summary=f"Unknown outcome '{c.outcome}'. Allowed: {', '.join(outcomes)}",
+        )
     df = ctx.frames.cases.assign(_y=ctx.frames.cases[c.outcome].astype(float))
     mask = df[c.dimension] == c.value
     versus = "the rest"
@@ -133,14 +139,14 @@ def _segment(ctx: EvidenceContext, c: SegmentCheck, auto: bool) -> EvidenceItem:
         # The scope IS this segment: compare it with all claims outside the scope instead.
         df = ctx.population.cases.assign(_y=ctx.population.cases[c.outcome].astype(float))
         mask = df[c.dimension] == c.value
-        versus = "all other claims (outside this scope)"
+        versus = f"all other {ctx.frames.pack.case.labels} (outside this scope)"
     cmp = compare_proportions(mask, df["_y"], f"{c.dimension}={c.value}")
     controls = [
         stratified_difference(df, mask, "_y", ctl, f"{c.dimension}={c.value}")
-        for ctl in CONTROLS
+        for ctl in ctx.frames.pack.analysis.controls
         if ctl != c.dimension
     ]
-    label = OUTCOMES[c.outcome]
+    label = outcomes[c.outcome]
     sig = "statistically significant" if cmp.significant else "NOT statistically significant"
     sample = f" Small sample: only {cmp.n_in} cases." if cmp.low_sample else ""
     parts = [
@@ -171,9 +177,10 @@ def _loop_mechanism(ctx: EvidenceContext, outcome: str) -> dict[str, object]:
     extra_days = (
         float(cases.loc[has, "cycle_hours"].mean() - cases.loc[~has, "cycle_hours"].mean()) / 24
     )
-    label = {"doc_requested": "an additional-documents request", "rework": "verification rework"}
+    pack = ctx.frames.pack
     text = (
-        f"Mechanism: claims with {label[outcome]} breach the SLA {cmp.rate_in:.0%} of the time "
+        f"Mechanism: {pack.case.labels} with {pack.analysis.outcomes[outcome].mechanism} breach "
+        f"the SLA {cmp.rate_in:.0%} of the time "
         f"vs {cmp.rate_out:.0%} without (p={cmp.p_value:.2g}) and take {extra_days:.1f} days "
         f"longer on average."
     )
@@ -198,6 +205,7 @@ def _activity(ctx: EvidenceContext, c: ActivityWaitCheck, auto: bool) -> Evidenc
                 f"Unknown or non-internal activity '{c.activity}'. Internal activities: {names}"
             ),
         )
+    labels = ctx.frames.pack.case.labels
     target = ctx.targets.get(c.activity)
     over = ""
     if target is not None:
@@ -207,15 +215,26 @@ def _activity(ctx: EvidenceContext, c: ActivityWaitCheck, auto: bool) -> Evidenc
             f" Target is {target:g} hours; {(waits > target).mean():.0%} of instances wait longer."
         )
     without = f"{stats.breach_rate_without:.0%}" if stats.breach_rate_without is not None else "n/a"
+    monthly = monthly_wait(ctx.frames, c.activity)
+    by_month = ""
+    if monthly:
+        series = ", ".join(f"{m} {w:.0f}h" for m, w in monthly["wait_by_month"].items())
+        moved = "moved with it" if monthly["r"] > 0 else "moved against it"
+        by_month = (
+            f" Mean wait by month: {series}; across months the SLA breach rate {moved} "
+            f"(r={monthly['r']:.2f}, p={monthly['p_value']:.2g})."
+        )
     summary = (
         f"'{c.activity}': mean wait {stats.mean_wait_hours:.1f}h, median "
         f"{stats.median_wait_hours:.1f}h, 90th percentile {stats.p90_wait_hours:.1f}h; "
         f"{stats.share_of_internal_wait:.0%} of all internal waiting; repeated in "
-        f"{stats.repeat_rate:.1%} of its claims. Claims including it breach "
+        f"{stats.repeat_rate:.1%} of its {labels}. {labels.capitalize()} including it breach "
         f"{stats.breach_rate_with:.0%} vs {without} without. "
         f"{'It is flagged as a bottleneck.' if stats.is_bottleneck else 'Not a bottleneck.'}{over}"
+        f"{by_month}"
     )
-    return EvidenceItem(check=c, ok=True, auto=auto, summary=summary, data=stats.model_dump())
+    data = stats.model_dump() | ({"monthly": monthly} if monthly else {})
+    return EvidenceItem(check=c, ok=True, auto=auto, summary=summary, data=data)
 
 
 def _weekday(ctx: EvidenceContext, c: WeekdayCheck, auto: bool) -> EvidenceItem:
@@ -223,7 +242,9 @@ def _weekday(ctx: EvidenceContext, c: WeekdayCheck, auto: bool) -> EvidenceItem:
     ev = ev[ev["handoff_isodow"].between(1, 5)]
     day = {v: k for k, v in WEEKDAY_NAMES.items()}[c.weekday]
     on_day = ev[ev["handoff_isodow"] == day]
-    late = on_day[on_day["handoff_hour"] >= 15]
+    late_hour = ctx.frames.pack.analysis.late_handoff_hour
+    labels = ctx.frames.pack.case.labels
+    late = on_day[on_day["handoff_hour"] >= late_hour]
     others = ev[ev["handoff_isodow"] != day]
     cases = ctx.frames.cases
     hit = cases["case_id"].isin(set(late["case_id"]))
@@ -233,9 +254,9 @@ def _weekday(ctx: EvidenceContext, c: WeekdayCheck, auto: bool) -> EvidenceItem:
     )
     summary = (
         f"Handoffs on {c.weekday}: mean wait {on_day['wait_hours'].mean():.1f}h "
-        f"(n={len(on_day)}); from 15:00 {late['wait_hours'].mean():.1f}h (n={len(late)}); "
-        f"other weekdays {others['wait_hours'].mean():.1f}h. Late handoffs affect "
-        f"{late['case_id'].nunique()} claims. Mechanism: claims with a late {c.weekday} "
+        f"(n={len(on_day)}); from {late_hour}:00 {late['wait_hours'].mean():.1f}h "
+        f"(n={len(late)}); other weekdays {others['wait_hours'].mean():.1f}h. Late handoffs "
+        f"affect {late['case_id'].nunique()} {labels}. Mechanism: {labels} with a late {c.weekday} "
         f"handoff breach the SLA {cmp.rate_in:.0%} of the time vs {cmp.rate_out:.0%} without "
         f"(p={cmp.p_value:.2g}) and take {extra_days:.1f} days longer on average."
     )
@@ -282,7 +303,8 @@ def _policy(ctx: EvidenceContext, c: PolicyCheck, auto: bool) -> EvidenceItem:
 
 def describe_check(check: Check) -> str:
     if isinstance(check, SegmentCheck):
-        return f"Compare {OUTCOMES[check.outcome]} for {check.dimension} = {check.value}"
+        label = get_pack().outcome_labels.get(check.outcome, check.outcome)
+        return f"Compare {label} for {check.dimension} = {check.value}"
     if isinstance(check, ActivityWaitCheck):
         return f"Waiting time before {check.activity}"
     if isinstance(check, WeekdayCheck):
@@ -292,7 +314,8 @@ def describe_check(check: Check) -> str:
 
 # --------------------------------------------------------------------- strong support
 
-SEGMENT_MIN_DIFF = {"breached": 0.05, "doc_requested": 0.10, "rework": 0.10}
+SEGMENT_MIN_DIFF_BREACH = 0.05  # breach-rate difference
+SEGMENT_MIN_DIFF_LOOP = 0.10  # loop-rate difference
 MECHANISM_MIN_DIFF = 0.10
 BOTTLENECK_MIN_BREACH_GAP = 0.20
 
@@ -310,7 +333,8 @@ def strong_support(e: EvidenceItem) -> str | None:
     if isinstance(e.check, SegmentCheck):
         if not d.get("significant") or d.get("low_sample") or e.explained_by:
             return None
-        if d.get("difference", 0) < SEGMENT_MIN_DIFF[e.check.outcome]:
+        breach = e.check.outcome == "breached"
+        if d.get("difference", 0) < (SEGMENT_MIN_DIFF_BREACH if breach else SEGMENT_MIN_DIFF_LOOP):
             return None
         if e.check.outcome != "breached":
             m = d.get("mechanism") or {}
@@ -330,9 +354,13 @@ def strong_support(e: EvidenceItem) -> str | None:
             and gap >= BOTTLENECK_MIN_BREACH_GAP
         ):
             return (
-                f"'{e.check.activity}' is a bottleneck and claims through it breach "
+                f"'{e.check.activity}' is a bottleneck and {get_pack().case.labels} through it "
+                f"breach "
                 f"{d['breach_rate_with']:.0%} vs {d['breach_rate_without']:.0%}"
             )
+        reason = trend_reason(e.check.activity, d, d.get("monthly"))
+        if reason:
+            return reason
         return None
     if isinstance(e.check, WeekdayCheck):
         if (
@@ -340,7 +368,7 @@ def strong_support(e: EvidenceItem) -> str | None:
             and d.get("breach_with", 0) - d.get("breach_without", 0) >= MECHANISM_MIN_DIFF
         ):
             return (
-                f"claims with a late {e.check.weekday} handoff breach "
+                f"{get_pack().case.labels} with a late {e.check.weekday} handoff breach "
                 f"{d['breach_with']:.0%} vs {d['breach_without']:.0%}, significant"
             )
         return None

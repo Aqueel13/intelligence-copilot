@@ -3,7 +3,7 @@ import { api, type ActivityStats, type Scope } from '../api/client'
 import { ProcessMap, type MapMode } from '../components/ProcessMap'
 import { Card, ErrorNote, LowSample, Refetching, Segmented, StatTile, StatusBadge } from '../components/ui'
 import { formatCount, formatDays, formatHours, formatPercent } from '../lib/format'
-import { useDomainScope, useScoped } from '../lib/hooks'
+import { useDomainScope, useLabels, useScoped } from '../lib/hooks'
 
 export default function Process() {
   const { domain, scope } = useDomainScope()
@@ -12,6 +12,7 @@ export default function Process() {
 }
 
 function ProcessBody({ scope }: { scope: Scope }) {
+  const L = useLabels()
   const [mode, setMode] = useState<MapMode>('frequency')
   const map = useScoped('processMap', scope, () => api.processMap(scope))
   const acts = useScoped('activities', scope, () => api.activities(scope))
@@ -22,7 +23,7 @@ function ProcessBody({ scope }: { scope: Scope }) {
   if (!map.data || !acts.data || !variants.data) return null
   if (map.data.cases === 0)
     return (
-      <Card title="No claims match these filters">
+      <Card title={`No ${L.many} match these filters`}>
         <p className="text-sm text-ink-2">Widen the period or clear a filter.</p>
       </Card>
     )
@@ -34,16 +35,16 @@ function ProcessBody({ scope }: { scope: Scope }) {
     <Refetching active={fetching}>
       <div className="grid gap-4">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatTile label="Claims analysed" value={formatCount(map.data.cases)} />
+          <StatTile label={`${L.Many} analysed`} value={formatCount(map.data.cases)} />
           <StatTile
             label="Process variants"
             value={formatCount(variants.data.distinct_variants)}
-            note={`Top ${variants.data.variants.length} cover ${formatPercent(variants.data.top_variants_share, 0)} of claims`}
+            note={`Top ${variants.data.variants.length} cover ${formatPercent(variants.data.top_variants_share, 0)} of ${L.many}`}
           />
           <StatTile
             label="Most common path"
             value={formatPercent(variants.data.variants[0]?.share ?? 0, 0)}
-            note="of claims follow the single most common sequence"
+            note={`of ${L.many} follow the single most common sequence`}
           />
           <div className="rounded-xl border border-hairline bg-surface p-4">
             <div className="text-xs text-ink-2">Bottlenecks</div>
@@ -61,7 +62,7 @@ function ProcessBody({ scope }: { scope: Scope }) {
 
         <Card
           title="Process map"
-          subtitle="How claims actually flowed. Edge thickness = number of transitions; labels on edges carrying ≥ 5% of claims."
+          subtitle={`How ${L.many} actually flowed. Edge thickness = number of transitions; labels on edges carrying ≥ 5% of ${L.many}.`}
           actions={
             <Segmented
               label="Show"
@@ -85,7 +86,7 @@ function ProcessBody({ scope }: { scope: Scope }) {
 
         <Card
           title="Process variants"
-          subtitle="Distinct paths from FNOL to Closed, most common first"
+          subtitle={`Distinct paths from ${L.start} to ${L.end}, most common first`}
         >
           <ol className="divide-y divide-hairline">
             {variants.data.variants.map((v) => (
@@ -99,7 +100,7 @@ function ProcessBody({ scope }: { scope: Scope }) {
                     <span className="tabular text-xs font-medium">{formatPercent(v.share)}</span>
                   </div>
                   <div className="tabular mt-0.5 text-[11px] text-ink-muted">
-                    {formatCount(v.cases)} claims {v.low_sample && <LowSample n={v.cases} />}
+                    {formatCount(v.cases)} {L.many} {v.low_sample && <LowSample n={v.cases} />}
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-1 text-[11px]">
@@ -144,8 +145,9 @@ function ActivityTable({
   customer: ActivityStats[]
   definitions: Record<string, string>
 }) {
+  const L = useLabels()
   return (
-    <Card title="Where claims wait" subtitle={definitions.waiting_time}>
+    <Card title={`Where ${L.many} wait`} subtitle={definitions.waiting_time}>
       <div className="overflow-x-auto">
         <table className="tabular w-full text-left text-xs">
           <thead>
@@ -185,7 +187,7 @@ function ActivityTable({
                   {formatPercent(a.breach_rate_with, 0)}
                   <span className="text-ink-muted">
                     {' / '}
-                    {a.breach_rate_without === null ? 'all claims' : formatPercent(a.breach_rate_without, 0)}
+                    {a.breach_rate_without === null ? `all ${L.many}` : formatPercent(a.breach_rate_without, 0)}
                   </span>
                 </td>
               </tr>
@@ -196,7 +198,7 @@ function ActivityTable({
       {customer.map((c) => (
         <p key={c.activity} className="mt-3 border-t border-hairline pt-3 text-xs text-ink-2">
           <b className="text-ink">Customer time:</b> {c.activity} took {formatHours(c.mean_wait_hours)} on average
-          (median {formatHours(c.median_wait_hours)}) in {formatCount(c.cases)} claims. Not counted as an internal
+          (median {formatHours(c.median_wait_hours)}) in {formatCount(c.cases)} {L.many}. Not counted as an internal
           queue.
         </p>
       ))}

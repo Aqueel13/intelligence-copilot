@@ -16,28 +16,36 @@ from watchdog_backend.domain.pack import get_pack
 from watchdog_backend.investigation.graph import Deps, run
 from watchdog_backend.knowledge.models import get_reranker
 from watchdog_backend.knowledge.service import get_retriever
-from watchdog_backend.llm.gateway import get_chat_model
+from watchdog_backend.llm.gateway import get_chat_model, get_light_model
 
 ROLES = ("router", "planner", "assessor", "recommender", "synthesizer", "answer")
 
 
-def build_deps(conn: Connection) -> Deps:
+def build_deps(conn: Connection, trace: dict[str, str | None] | None = None) -> Deps:
     models = {role: (lambda m: (m[0], m[1].id))(get_chat_model(role)) for role in ROLES}
     models["default"] = models["planner"]
-    return Deps(conn, MetricsEngine(get_pack()), get_retriever(), get_reranker(), models)
+    if light := get_light_model("router"):  # classifying the question is a simple request
+        models["router"] = (light[0], light[1].id)
+    return Deps(
+        conn, MetricsEngine(get_pack()), get_retriever(), get_reranker(), models, trace or {}
+    )
 
 
 def _sse(event: str, data: Any) -> str:
     return f"event: {event}\ndata: {json.dumps(jsonable_encoder(data), ensure_ascii=False)}\n\n"
 
 
-def stream_investigation(question: str, scope: ProcessQuery) -> Iterator[str]:
+def stream_investigation(
+    question: str, scope: ProcessQuery, user: dict[str, str | None] | None = None
+) -> Iterator[str]:
     """Generator for a StreamingResponse. Uses its own connections (it outlives the request)."""
     engine = get_engine()
     domain = get_pack().domain
     started = time.perf_counter()
     with engine.begin() as conn:
         deps_models = {role: get_chat_model(role)[1].id for role in ROLES}
+        if light := get_light_model("router"):
+            deps_models["router"] = light[1].id
         inv_id = conn.execute(
             text("""
                 INSERT INTO intelligence.investigations (domain, question, scope, status, models)
@@ -56,7 +64,8 @@ def stream_investigation(question: str, scope: ProcessQuery) -> Iterator[str]:
     state: dict[str, Any] = {"question": question, "scope": scope.model_dump(mode="json")}
     try:
         with engine.connect() as conn:
-            for node, update in run(build_deps(conn), question, scope):
+            trace = {"purpose": "investigation", "investigation_id": str(inv_id), **(user or {})}
+            for node, update in run(build_deps(conn, trace), question, scope):
                 state.update(update)
                 yield _sse("step", {"node": node, "update": update})
         result = jsonable_encoder({k: v for k, v in state.items() if k not in ("question",)})

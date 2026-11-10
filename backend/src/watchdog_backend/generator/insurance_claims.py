@@ -20,7 +20,6 @@ Decoys:
   DC3  Respondent CSAT understates true CSAT (non-response bias)
 """
 
-import json
 import math
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
@@ -32,8 +31,25 @@ import pandas as pd
 from watchdog_backend.domain.pack import DomainPack
 from watchdog_backend.generator import comments
 from watchdog_backend.generator.calendar import WorkCalendar
+from watchdog_backend.generator.common import (
+    GeneratedDataset,
+    SimEvent,
+    SimResult,
+    choose,
+    hours,
+    lognormal,
+)
 
 CAUSES = ("RC1", "RC2", "RC3", "RC4")
+
+# How each catalogue action changes the world, in generator terms (the next-month simulator).
+ACTION_EFFECTS: dict[str, dict[str, object]] = {
+    "delegate_mid_value_approvals": {"rc1_exempt_max_amount": 500_000},
+    "add_senior_adjuster_capacity": {"rc1_enabled": False},
+    "enforce_broker_checklist": {"doc_request_broker_total": 0.06},  # = the base rate
+    "retrain_team_b": {"qa_reject_team_b_total": 0.05},  # = the base rate
+    "saturday_rota": {"rc4_probability": 0.0},
+}
 NO_CAUSES: frozenset[str] = frozenset()
 ALL_CAUSES: frozenset[str] = frozenset(CAUSES)
 MAX_DOC_REQUESTS = 2
@@ -136,20 +152,6 @@ class Draws:
         self.comment_pick = u(2)
 
 
-def _lognormal(median: float, sigma: float, z: float) -> float:
-    return median * math.exp(sigma * z)
-
-
-def _choose(weights: dict[str, float], u: float) -> str:
-    total = sum(weights.values())
-    acc = 0.0
-    for key, w in weights.items():
-        acc += w / total
-        if u < acc:
-            return key
-    return next(reversed(weights))
-
-
 @dataclass(frozen=True)
 class ClaimProfile:
     case_id: str
@@ -162,32 +164,6 @@ class ClaimProfile:
     month_index: int  # 0 = first month of the period
 
 
-@dataclass(frozen=True)
-class SimEvent:
-    activity: str
-    resource: str
-    start: datetime
-    end: datetime
-    wait_hours: float  # calendar hours since the previous activity ended
-
-
-@dataclass
-class SimResult:
-    events: list[SimEvent]
-    triggered: set[str]
-
-    @property
-    def closed_at(self) -> datetime:
-        return self.events[-1].end
-
-    @property
-    def cycle_hours(self) -> float:
-        return (self.closed_at - self.events[0].start).total_seconds() / 3600
-
-    def count(self, activity: str) -> int:
-        return sum(e.activity == activity for e in self.events)
-
-
 class InsuranceClaimsGenerator:
     def __init__(self, pack: DomainPack, config: GeneratorConfig | None = None) -> None:
         self.pack = pack
@@ -197,6 +173,8 @@ class InsuranceClaimsGenerator:
         )
         self.tz = ZoneInfo(pack.case.timezone)
         self.sla_hours = pack.sla.target_hours
+        assert pack.approval is not None, "the insurance pack declares an approval section"
+        self.approval = pack.approval
         self.senior_threshold = pack.approval.senior_threshold_inr
         self.n_months = (self.cfg.end.year - self.cfg.start.year) * 12 + (
             self.cfg.end.month - self.cfg.start.month
@@ -207,8 +185,8 @@ class InsuranceClaimsGenerator:
     def _profile(self, i: int, d: Draws) -> ClaimProfile:
         c = self.cfg
         lob = "motor" if d.lob < c.lob_weights["motor"] else "health"
-        region = _choose(c.region_weights, d.region)
-        channel = _choose(
+        region = choose(c.region_weights, d.region)
+        channel = choose(
             c.pune_channel_weights if region == "Pune" else c.channel_weights, d.channel
         )
         team = c.teams[min(int(d.team * len(c.teams)), len(c.teams) - 1)]
@@ -217,7 +195,7 @@ class InsuranceClaimsGenerator:
             if lob == "motor"
             else (c.health_amount_median, c.health_amount_sigma)
         )
-        amount = round(min(max(_lognormal(median, sigma, d.amount), c.amount_floor), c.amount_cap))
+        amount = round(min(max(lognormal(median, sigma, d.amount), c.amount_floor), c.amount_cap))
 
         w_start, w_end = c.window_start or c.start, c.window_end or c.end
         n_days = (w_end - w_start).days + 1
@@ -271,7 +249,7 @@ class InsuranceClaimsGenerator:
                     triggered.add("RC4")
             slot += 1
             end = cal.add_working_hours(start, work_h)
-            events.append(SimEvent(activity, resource, start, end, _hours(start - handoff)))
+            events.append(SimEvent(activity, resource, start, end, hours(start - handoff)))
 
         def calendar_step(activity: str, resource: str, duration_h: float) -> None:
             start = events[-1].end
@@ -287,8 +265,8 @@ class InsuranceClaimsGenerator:
         work_step(
             "Document Check",
             "Intake Desk",
-            _lognormal(1.5, 0.6, d.dc_wait[0]),
-            _lognormal(0.5, 0.4, d.dc_work[0]),
+            lognormal(1.5, 0.6, d.dc_wait[0]),
+            lognormal(0.5, 0.4, d.dc_work[0]),
         )
         broker_extra = (c.doc_request_broker_total - c.doc_request_base) / (1 - c.doc_request_base)
         for k in range(MAX_DOC_REQUESTS):
@@ -303,13 +281,13 @@ class InsuranceClaimsGenerator:
                 break
             if rc2_hit and not base_hit:
                 triggered.add("RC2")
-            customer_h = min(max(_lognormal(40.0, 0.5, d.req_duration[k]), 6.0), 200.0)
+            customer_h = min(max(lognormal(40.0, 0.5, d.req_duration[k]), 6.0), 200.0)
             calendar_step("Request Additional Documents", "Customer", customer_h)
             work_step(
                 "Document Check",
                 "Intake Desk",
-                _lognormal(1.5, 0.6, d.dc_wait[k + 1]),
-                _lognormal(0.5, 0.4, d.dc_work[k + 1]),
+                lognormal(1.5, 0.6, d.dc_wait[k + 1]),
+                lognormal(0.5, 0.4, d.dc_work[k + 1]),
             )
 
         # Assessment: survey for motor, medical adjudication for health (same baseline: DC1)
@@ -320,8 +298,8 @@ class InsuranceClaimsGenerator:
         work_step(
             activity,
             resource,
-            _lognormal(3.0, 0.7, d.assess_wait),
-            _lognormal(2.0, 0.5, d.assess_work),
+            lognormal(3.0, 0.7, d.assess_wait),
+            lognormal(2.0, 0.5, d.assess_work),
         )
 
         # Verification ↔ QA loop (RC3)
@@ -332,14 +310,14 @@ class InsuranceClaimsGenerator:
             work_step(
                 "Verification",
                 p.team,
-                _lognormal(ver_wait_median, 0.6, d.ver_wait[k]),
-                _lognormal(1.5, 0.4, d.ver_work[k]),
+                lognormal(ver_wait_median, 0.6, d.ver_wait[k]),
+                lognormal(1.5, 0.4, d.ver_work[k]),
             )
             work_step(
                 "QA",
                 "QA Desk",
-                _lognormal(1.0, 0.6, d.qa_wait[k]),
-                _lognormal(0.5, 0.4, d.qa_work[k]),
+                lognormal(1.0, 0.6, d.qa_wait[k]),
+                lognormal(0.5, 0.4, d.qa_work[k]),
             )
             if k == MAX_QA_ROUNDS - 1:
                 break
@@ -357,23 +335,23 @@ class InsuranceClaimsGenerator:
 
         # Senior approval above the threshold (RC1: understaffed, worsening over time)
         if p.amount > self.senior_threshold:
-            wait = _lognormal(c.senior_base_wait_median_h, 0.6, d.senior_wait)
+            wait = lognormal(c.senior_base_wait_median_h, 0.6, d.senior_wait)
             exempt = c.rc1_exempt_max_amount is not None and p.amount <= c.rc1_exempt_max_amount
             if "RC1" not in disabled and c.rc1_enabled and not exempt:
                 progress = p.month_index / max(self.n_months, 1)
                 median = c.rc1_extra_median_first_month_h + progress * (
                     c.rc1_extra_median_last_month_h - c.rc1_extra_median_first_month_h
                 )
-                wait += _lognormal(median, 0.5, d.senior_extra)
+                wait += lognormal(median, 0.5, d.senior_extra)
                 triggered.add("RC1")
             who = "Senior Adjuster 1" if d.senior_who < 0.5 else "Senior Adjuster 2"
-            work_step("Senior Approval", who, wait, _lognormal(1.0, 0.4, d.senior_work))
+            work_step("Senior Approval", who, wait, lognormal(1.0, 0.4, d.senior_work))
 
         work_step(
             "Settlement",
             "Finance Ops",
-            _lognormal(2.0, 0.6, d.settle_wait),
-            _lognormal(1.0, 0.4, d.settle_work),
+            lognormal(2.0, 0.6, d.settle_wait),
+            lognormal(1.0, 0.4, d.settle_work),
         )
         last = events[-1].end
         events.append(SimEvent("Closed", "System", last, last, 0.0))
@@ -448,7 +426,7 @@ class InsuranceClaimsGenerator:
 
     # ------------------------------------------------------------------ outputs
 
-    def generate(self) -> "GeneratedDataset":
+    def generate(self) -> "InsuranceClaimsDataset":
         cases, events, feedback, truth = [], [], [], []
         for i in range(self.cfg.n_claims):
             d = Draws(np.random.default_rng([self.cfg.seed, i + self.cfg.id_offset]))
@@ -502,64 +480,33 @@ class InsuranceClaimsGenerator:
                 row[f"{cause}_triggered"] = cause in full.triggered
                 row[f"{cause}_delay_hours"] = full.cycle_hours - cf.cycle_hours
                 row[f"{cause}_breach_attributable"] = breached and cf.cycle_hours <= self.sla_hours
+            delegation = self.approval.delegation
             in_band = (
-                self.pack.approval.delegation is not None
-                and self.pack.approval.delegation.band_min_inr
-                < p.amount
-                <= self.pack.approval.delegation.band_max_inr
+                delegation is not None
+                and delegation.band_min_inr < p.amount <= delegation.band_max_inr
             )
             delegated = counterfactual["RC1"] if in_band else full
             row["delegation_cycle_hours"] = delegated.cycle_hours
             row["delegation_breached"] = delegated.cycle_hours > self.sla_hours
             truth.append(row)
 
-        return GeneratedDataset(
+        return InsuranceClaimsDataset(
             pack=self.pack,
             config=self.cfg,
             cases=pd.DataFrame(cases),
             events=pd.DataFrame(events),
             feedback=pd.DataFrame(feedback),
             truth=pd.DataFrame(truth),
+            causes=CAUSES,
         )
 
 
-def _hours(td: timedelta) -> float:
-    return td.total_seconds() / 3600
-
-
-@dataclass
-class GeneratedDataset:
-    pack: DomainPack
-    config: GeneratorConfig
-    cases: pd.DataFrame
-    events: pd.DataFrame
-    feedback: pd.DataFrame  # includes private _true_* columns; never load those
-    truth: pd.DataFrame
-
-    def public_feedback(self) -> pd.DataFrame:
-        return self.feedback.drop(columns=[c for c in self.feedback if c.startswith("_")])
-
+class InsuranceClaimsDataset(GeneratedDataset):
     def summary(self) -> dict[str, object]:
         """Ground-truth summary: what a correct investigation should conclude."""
-        t = self.truth.merge(self.cases, on="case_id")
-        attrs = pd.json_normalize(t["attributes"].tolist())
-        t = pd.concat([t.drop(columns="attributes"), attrs], axis=1)
+        t = self.joined_truth()
         n_breached = int(t["breached"].sum())
-
-        causes = {}
-        for cause in CAUSES:
-            affected = t[t[f"{cause}_triggered"]]
-            attributable = int(t[f"{cause}_breach_attributable"].sum())
-            causes[cause] = {
-                "claims_affected": len(affected),
-                "mean_delay_hours_when_affected": round(
-                    float(affected[f"{cause}_delay_hours"].mean()), 1
-                )
-                if len(affected)
-                else 0.0,
-                "breaches_attributable": attributable,
-                "share_of_breaches": round(attributable / n_breached, 3) if n_breached else 0.0,
-            }
+        causes = self.root_causes(t)
 
         bands = self.pack.dimension("amount_band").bands or []
         edges = [-math.inf] + [b.max for b in bands[:-1] if b.max is not None] + [math.inf]
@@ -628,20 +575,3 @@ class GeneratedDataset:
                 },
             },
         }
-
-    def write(self, out_dir: "PathLike") -> None:
-        from pathlib import Path
-
-        out = Path(out_dir)
-        out.mkdir(parents=True, exist_ok=True)
-        cases = self.cases.assign(attributes=self.cases["attributes"].map(json.dumps))
-        cases.to_csv(out / "cases.csv", index=False)
-        self.events.to_csv(out / "events.csv", index=False)
-        self.public_feedback().to_csv(out / "feedback.csv", index=False)
-        self.truth.to_csv(out / "ground_truth_cases.csv", index=False)
-        (out / "ground_truth.json").write_text(
-            json.dumps(self.summary(), indent=2, ensure_ascii=False, default=str), encoding="utf-8"
-        )
-
-
-PathLike = str

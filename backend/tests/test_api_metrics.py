@@ -3,10 +3,8 @@ from fastapi.testclient import TestClient
 
 
 @pytest.fixture(scope="module")
-def client(db_engine) -> TestClient:
-    from watchdog_backend.main import app
-
-    return TestClient(app)
+def client(db_engine, client_as) -> TestClient:
+    return client_as("guest")
 
 
 def test_catalogue_lists_metrics_with_their_dimensions(client) -> None:

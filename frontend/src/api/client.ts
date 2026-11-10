@@ -1,4 +1,5 @@
 // Typed API client. Shapes mirror the backend's Pydantic models.
+import { apiFetch } from '../lib/domainStore'
 
 export interface DatabaseHealth {
   ok: boolean
@@ -21,15 +22,34 @@ export interface FilterDimension {
   values: string[] | null
 }
 
+export interface OverviewTile {
+  metric: string
+  label: string
+  note: string | null
+  secondary: string | null
+}
+
 export interface DomainInfo {
   domain: string
   display_name: string
   case_label: string
+  case_label_plural: string
   currency: string
   timezone: string
   sla_name: string
   sla_hours: number
-  senior_threshold: number
+  sla_start: string
+  sla_end: string
+  senior_threshold: number | null
+  system_of_record: string
+  investigate_examples: string[]
+  knowledge_examples: string[]
+  overview: {
+    spotlight: OverviewTile | null
+    tiles: OverviewTile[]
+    breakdown_dimensions: Record<string, string>
+    breakdown_metrics: Record<string, string>
+  }
   filters: FilterDimension[]
   activities: { name: string; label: string; kind: string }[]
   data_from: string | null
@@ -193,6 +213,12 @@ export interface Answer {
   model: string
   retrieval_ms: number
   generation_ms: number
+  tier: 'standard' | 'light'
+  tier_reason: string | null
+  cached: boolean
+  cached_question: string | null
+  cached_at: string | null
+  cache_similarity: number | null
 }
 
 export interface IngestResult {
@@ -206,7 +232,7 @@ export interface IngestResult {
 export class ApiError extends Error {}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, {
+  const res = await apiFetch(`/api${path}`, {
     ...init,
     headers: { 'content-type': 'application/json', ...init?.headers },
   })
@@ -229,7 +255,7 @@ const post = <T>(path: string, body: unknown) =>
 export const api = {
   health: async (): Promise<HealthResponse> => {
     // 503 still carries a body describing what is degraded.
-    const res = await fetch('/api/health')
+    const res = await apiFetch('/api/health')
     if (!res.ok && res.status !== 503) throw new ApiError(`Backend returned ${res.status}`)
     return res.json() as Promise<HealthResponse>
   },
@@ -246,13 +272,13 @@ export const api = {
       k: 5,
       filters: { include_superseded: includeSuperseded },
     }),
-  ask: (question: string, includeSuperseded = false) =>
-    post<Answer>('/knowledge/ask', { question, filters: { include_superseded: includeSuperseded } }),
+  ask: (question: string, includeSuperseded = false, useCache = true) =>
+    post<Answer>('/knowledge/ask', { question, filters: { include_superseded: includeSuperseded }, use_cache: useCache }),
   upload: async (file: File, fields: Record<string, string>): Promise<IngestResult> => {
     const form = new FormData()
     form.append('file', file)
     for (const [k, v] of Object.entries(fields)) if (v) form.append(k, v)
-    const res = await fetch('/api/knowledge/documents', { method: 'POST', body: form })
+    const res = await apiFetch('/api/knowledge/documents', { method: 'POST', body: form })
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as { detail?: string }
       throw new ApiError(body.detail ?? `${res.status} ${res.statusText}`)

@@ -19,6 +19,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
 from sqlalchemy import Connection
 
+from watchdog_backend.domain.pack import get_pack
 from watchdog_backend.knowledge.models import Reranker
 from watchdog_backend.knowledge.retrieval import (
     Method,
@@ -26,6 +27,7 @@ from watchdog_backend.knowledge.retrieval import (
     Retriever,
     SearchFilters,
 )
+from watchdog_backend.knowledge.routing import classify
 from watchdog_backend.llm.gateway import LLMCallError, invoke_with_deadline
 
 NOT_FOUND = "NOT_IN_SOURCES"
@@ -36,13 +38,13 @@ SUPPORT_MARGIN = 3.0  # a cited source may score at most this far below the best
 SUPPORT_FLOOR = 1.0  # …and must clear this absolute cross-encoder score
 ATTRIBUTION_MIN = 3.0  # the verifier only re-attributes a sentence to a source this strong
 
-SYSTEM_PROMPT = f"""You answer questions about an insurance company's claims policies and \
-procedures, using ONLY the numbered sources provided.
+SYSTEM_PROMPT = """You answer questions about the policies and procedures of {subject} \
+process, using ONLY the numbered sources provided.
 
 Rules:
 - Every factual sentence must end with the source number(s) it comes from, like [1] or [2, 3].
 - Use only facts stated in the sources. Do not use outside knowledge. Do not guess numbers.
-- If the sources do not contain the answer, reply with exactly: {NOT_FOUND}
+- If the sources do not contain the answer, reply with exactly: {not_found}
 - Be concise: at most 5 sentences. Quote amounts, times and section numbers exactly."""
 
 
@@ -82,6 +84,14 @@ class Answer(BaseModel):
     model: str
     retrieval_ms: float
     generation_ms: float
+    # Which model tier answered, and why (simple lookups go to the light model if configured).
+    tier: str = "standard"
+    tier_reason: str | None = None
+    # Set when the answer came from the cache instead of a model call.
+    cached: bool = False
+    cached_question: str | None = None
+    cached_at: str | None = None
+    cache_similarity: float | None = None
 
 
 def format_sources(chunks: list[RetrievedChunk]) -> str:
@@ -164,7 +174,10 @@ def answer_question(
     k: int = 5,
     method: Method = "hybrid",
     filters: SearchFilters | None = None,
+    light: tuple[BaseChatModel, str] | None = None,
 ) -> Answer:
+    """Answer from retrieved policy text. With `light` (model, id), simple lookups are answered
+    by the light model instead (knowledge/routing.py)."""
     started = time.perf_counter()
     chunks = retriever.search(conn, question, k=k, method=method, filters=filters)
     retrieval_ms = (time.perf_counter() - started) * 1000
@@ -185,12 +198,20 @@ def answer_question(
             generation_ms=0.0,
         )
 
+    tier, tier_reason = "standard", None
+    if light is not None:
+        kind, tier_reason = classify(question, chunks)
+        if kind == "simple":
+            (model, model_id), tier = light, "light"
+
     started = time.perf_counter()
     try:
         reply = invoke_with_deadline(
             model,
             [
-                SystemMessage(SYSTEM_PROMPT),
+                SystemMessage(
+                    SYSTEM_PROMPT.format(subject=get_pack().subject, not_found=NOT_FOUND)
+                ),
                 HumanMessage(f"Sources:\n\n{format_sources(chunks)}\n\nQuestion: {question}"),
             ],
             model_id,
@@ -214,6 +235,8 @@ def answer_question(
             model=model_id,
             retrieval_ms=retrieval_ms,
             generation_ms=generation_ms,
+            tier=tier,
+            tier_reason=tier_reason,
         )
 
     text, _, invalid = validate_citations(raw, len(chunks))
@@ -246,4 +269,6 @@ def answer_question(
         model=model_id,
         retrieval_ms=retrieval_ms,
         generation_ms=generation_ms,
+        tier=tier,
+        tier_reason=tier_reason,
     )

@@ -52,6 +52,7 @@ services:
       - ./domain_packs:/domain_packs:ro
       - ./datasets:/datasets
       - ./.cache:/.cache   # embedding/reranker model files, shared with local runs
+      - ./evaluation:/evaluation:ro   # saved evaluation runs (model comparison page)
     extra_hosts:
       - "host.docker.internal:${DOCKER_BRIDGE_IP:-172.17.0.1}"
     ports:

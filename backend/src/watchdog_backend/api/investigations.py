@@ -11,6 +11,8 @@ from watchdog_backend.analytics.metrics import MetricQueryError
 from watchdog_backend.analytics.process import ProcessQuery
 from watchdog_backend.api.metrics import get_engine
 from watchdog_backend.db import get_session
+from watchdog_backend.identity.deps import require
+from watchdog_backend.identity.service import Principal
 from watchdog_backend.investigation.service import (
     get_investigation,
     list_investigations,
@@ -28,7 +30,9 @@ class InvestigationRequest(BaseModel):
 
 
 @router.post("/stream")
-def start_investigation(req: InvestigationRequest) -> StreamingResponse:
+def start_investigation(
+    req: InvestigationRequest, who: Annotated[Principal, Depends(require("investigate"))]
+) -> StreamingResponse:
     """Run an investigation, streaming progress as Server-Sent Events:
     `start` {id, models} → `step` {node, update}… → `done` {id} | `error` {id, message}."""
     try:  # validate the scope and model configuration before opening the stream
@@ -41,7 +45,7 @@ def start_investigation(req: InvestigationRequest) -> StreamingResponse:
     except LLMConfigError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return StreamingResponse(
-        stream_investigation(req.question, req.scope),
+        stream_investigation(req.question, req.scope, {"user_id": who.user.user_id}),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

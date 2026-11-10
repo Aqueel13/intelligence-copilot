@@ -12,14 +12,19 @@ from watchdog_backend.analytics.metrics import (
     MetricsEngine,
 )
 from watchdog_backend.db import get_session
-from watchdog_backend.domain.pack import get_pack
+from watchdog_backend.domain.pack import current_domain, get_pack
 
 router = APIRouter(prefix="/metrics", tags=["metrics"])
 
 
 @lru_cache
+def _engine(domain: str) -> MetricsEngine:
+    return MetricsEngine(get_pack(domain))
+
+
 def get_engine() -> MetricsEngine:
-    return MetricsEngine(get_pack())
+    """The active pack's metrics engine (cached per pack)."""
+    return _engine(current_domain())
 
 
 class DimensionInfo(BaseModel):

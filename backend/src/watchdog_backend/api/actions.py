@@ -1,17 +1,18 @@
 """Action Centre API: propose, decide, execute, and inspect the audit trail."""
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from watchdog_backend.db import get_engine
 from watchdog_backend.governance import audit
 from watchdog_backend.governance import service as gov
-from watchdog_backend.governance.config import User, get_governance
 from watchdog_backend.governance.impact import impact_snapshot
 from watchdog_backend.governance.mcp_client import MCPToolError, call_operations_tool
+from watchdog_backend.identity.deps import require
+from watchdog_backend.identity.service import Principal
 
 router = APIRouter(tags=["actions"])
 _HTTP = {"not_found": 404, "forbidden": 403, "conflict": 409, "invalid": 422}
@@ -19,12 +20,6 @@ _HTTP = {"not_found": 404, "forbidden": 403, "conflict": 409, "invalid": 422}
 
 def _fail(exc: gov.GovernanceError) -> HTTPException:
     return HTTPException(status_code=_HTTP[exc.code], detail=str(exc))
-
-
-@router.get("/governance/users", response_model=list[User])
-def users() -> list[User]:
-    """Demo identities until login exists (M8). Identity is self-asserted."""
-    return get_governance().users
 
 
 @router.get("/actions", response_model=list[gov.ActionRequest])
@@ -49,16 +44,17 @@ def get_action(request_id: UUID) -> dict[str, Any]:
 
 class ProposeIn(BaseModel):
     action_id: str
-    user_id: str
     rationale: str | None = Field(None, max_length=1000)
     investigation_id: UUID | None = None
 
 
 @router.post("/actions", response_model=gov.ActionRequest, status_code=201)
-def propose(body: ProposeIn) -> gov.ActionRequest:
+def propose(
+    body: ProposeIn, who: Annotated[Principal, Depends(require("propose_action"))]
+) -> gov.ActionRequest:
     with get_engine().connect() as conn:
         try:
-            actor = gov.user_actor(body.user_id)
+            actor = gov.principal_actor(who)
             impact = impact_snapshot(conn, body.action_id, body.investigation_id)
             return gov.propose(
                 conn, actor, body.action_id, body.rationale, body.investigation_id, impact
@@ -68,45 +64,46 @@ def propose(body: ProposeIn) -> gov.ActionRequest:
 
 
 class DecisionIn(BaseModel):
-    user_id: str
     decision: Literal["approved", "rejected"]
     note: str | None = Field(None, max_length=1000)
 
 
 @router.post("/actions/{request_id}/decision", response_model=gov.ActionRequest)
-def decide(request_id: UUID, body: DecisionIn) -> gov.ActionRequest:
+def decide(
+    request_id: UUID,
+    body: DecisionIn,
+    who: Annotated[Principal, Depends(require("decide_action"))],
+) -> gov.ActionRequest:
     with get_engine().connect() as conn:
         try:
-            actor = gov.user_actor(body.user_id)
+            actor = gov.principal_actor(who)
             return gov.decide(conn, actor, request_id, body.decision, body.note)
         except gov.GovernanceError as exc:
             raise _fail(exc) from exc
 
 
-class ExecuteIn(BaseModel):
-    user_id: str
-
-
 @router.post("/actions/{request_id}/execute", response_model=gov.ActionRequest)
-async def execute(request_id: UUID, body: ExecuteIn) -> gov.ActionRequest:
+async def execute(
+    request_id: UUID, who: Annotated[Principal, Depends(require("execute_action"))]
+) -> gov.ActionRequest:
     """Execute through the Operations MCP server. The backend checks first (fast, clear
     errors); the MCP server checks again before anything changes."""
     with get_engine().connect() as conn:
+        actor = gov.principal_actor(who)
         try:
-            gov.user_actor(body.user_id)
             req = gov.get(conn, request_id)
         except gov.GovernanceError as exc:
             raise _fail(exc) from exc
         if req.status != "approved":
             audit.append(
                 conn,
-                body.user_id,
+                actor.id,
                 "user",
                 "action.execute_denied",
                 request_id,
                 {
                     "status": req.status,
-                    "via": "ui",
+                    "via": actor.via,
                     "reason": "only approved actions can be executed",
                 },
             )
@@ -117,11 +114,11 @@ async def execute(request_id: UUID, body: ExecuteIn) -> gov.ActionRequest:
             )
         audit.append(
             conn,
-            body.user_id,
+            actor.id,
             "user",
             "action.execute_requested",
             request_id,
-            {"via": "ui", "through": "operations-mcp"},
+            {"via": actor.via, "through": "operations-mcp"},
         )
         conn.commit()
     try:

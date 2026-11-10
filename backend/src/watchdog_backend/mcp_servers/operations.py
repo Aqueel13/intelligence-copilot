@@ -10,6 +10,8 @@ Tools
 - verify_audit_log         read   check the audit hash chain
 
 There is deliberately no approve tool: approval is a human decision made in the web app.
+Tools that work on a whole domain take an optional `domain` (a domain pack name; default: the
+default pack); tools that take a request id work on that request's own domain.
 Every client authenticates with a bearer token (OPERATIONS_MCP_TOKENS); the token's client
 name is recorded in the audit log as the actor.
 
@@ -31,6 +33,7 @@ from mcp.types import ToolAnnotations
 
 from watchdog_backend.config import get_settings
 from watchdog_backend.db import get_engine
+from watchdog_backend.domain.pack import UnknownDomainError, current_domain, use_domain
 from watchdog_backend.governance import audit
 from watchdog_backend.governance import service as gov
 from watchdog_backend.governance.config import get_governance
@@ -55,19 +58,22 @@ def _actor() -> gov.Actor:
     return gov.Actor(id=client, type="mcp_client", via=f"mcp:{client}")
 
 
-async def _call(fn, *args) -> Any:
-    """Run a governance function on a fresh connection. A refused or invalid request becomes a
-    ToolError, so the client sees *why* (e.g. "needs a human approval first"); anything
-    unexpected stays a generic error and is logged server-side."""
+async def _call(fn, *args, domain: str | None = None) -> Any:
+    """Run a governance function on a fresh connection, with `domain` as the active pack. A
+    refused or invalid request becomes a ToolError, so the client sees *why* (e.g. "needs a
+    human approval first"); anything unexpected stays a generic error and is logged
+    server-side."""
 
     def work():
-        with get_engine().connect() as conn:
+        with use_domain(domain or current_domain()), get_engine().connect() as conn:
             return fn(conn, *args)
 
     try:
         return await anyio.to_thread.run_sync(work)
     except gov.GovernanceError as exc:
         raise ToolError(f"Refused ({exc.code}): {exc}") from exc
+    except UnknownDomainError as exc:
+        raise ToolError(str(exc)) from exc
 
 
 def _uuid(value: str) -> UUID:
@@ -81,8 +87,9 @@ server = MCPServer(
     name="watchdog-operations",
     title="Intelligence WatchDog: Operations",
     instructions=(
-        "Corrective actions for claims operations. You may list and propose actions and "
-        "execute actions a person has approved. You cannot approve actions."
+        "Corrective actions for business operations (one domain pack per process, e.g. "
+        "insurance_claims, procure_to_pay). You may list and propose actions and execute "
+        "actions a person has approved. You cannot approve actions."
     ),
     token_verifier=StaticTokenVerifier(),
     auth=AuthSettings(
@@ -96,28 +103,36 @@ READ = ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=F
 
 
 @server.tool(annotations=READ)
-async def list_catalogue_actions() -> list[dict[str, Any]]:
-    """List the corrective actions allowed in this domain, with the policy that permits each
+async def list_catalogue_actions(domain: str | None = None) -> list[dict[str, Any]]:
+    """List the corrective actions allowed in a domain, with the policy that permits each
     and the roles that must approve it."""
-    gov_cfg = get_governance()
-    return [
-        {
-            "action_id": a.id,
-            "title": a.title,
-            "description": a.description,
-            "policy_refs": a.policy_refs,
-            "effort": a.effort,
-            "approver_roles": gov_cfg.approvals[a.id].roles if a.id in gov_cfg.approvals else [],
-        }
-        for a in get_catalogue().actions.values()
-    ]
+
+    def actions(_conn) -> list[dict[str, Any]]:
+        gov_cfg = get_governance()
+        return [
+            {
+                "action_id": a.id,
+                "title": a.title,
+                "description": a.description,
+                "policy_refs": a.policy_refs,
+                "effort": a.effort,
+                "approver_roles": gov_cfg.approvals[a.id].roles
+                if a.id in gov_cfg.approvals
+                else [],
+            }
+            for a in get_catalogue().actions.values()
+        ]
+
+    return await _call(actions, domain=domain)
 
 
 @server.tool(annotations=READ)
-async def list_action_requests(status: str | None = None) -> list[dict[str, Any]]:
-    """List action requests, newest first. status: proposed, approved, rejected, executing,
-    executed or failed."""
-    rows = await _call(gov.list_requests, status)
+async def list_action_requests(
+    status: str | None = None, domain: str | None = None
+) -> list[dict[str, Any]]:
+    """List a domain's action requests, newest first. status: proposed, approved, rejected,
+    executing, executed or failed."""
+    rows = await _call(gov.list_requests, status, domain=domain)
     return [r.model_dump(mode="json", exclude={"operation", "impact"}) for r in rows]
 
 
@@ -134,12 +149,15 @@ async def get_action_request(request_id: str) -> dict[str, Any]:
 
 
 @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
-async def propose_action(action_id: str, rationale: str) -> dict[str, Any]:
-    """Propose a corrective action from the catalogue. Nothing changes until a person with
-    the required role approves it in the web app."""
+async def propose_action(
+    action_id: str, rationale: str, domain: str | None = None
+) -> dict[str, Any]:
+    """Propose a corrective action from a domain's catalogue. Nothing changes until a person
+    with the required role approves it in the web app."""
     actor = _actor()  # read the caller's identity in the request context, not the worker thread
     req = await _call(
-        lambda c: gov.propose(c, actor, action_id, rationale, None, impact_snapshot(c, action_id))
+        lambda c: gov.propose(c, actor, action_id, rationale, None, impact_snapshot(c, action_id)),
+        domain=domain,
     )
     return req.model_dump(mode="json")
 

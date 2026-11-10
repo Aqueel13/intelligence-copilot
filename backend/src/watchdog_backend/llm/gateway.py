@@ -8,6 +8,7 @@ Callers ask for a role (`get_chat_model("answer")`), never a provider, so swappi
 configuration only. Every call site gets the model's identity back for logging/evaluation.
 """
 
+import contextvars
 import threading
 from dataclasses import dataclass
 from functools import lru_cache
@@ -71,7 +72,10 @@ def invoke_with_deadline(runnable: Any, payload: Any, model_id: str = "model") -
         except BaseException as exc:  # re-raised in the caller's thread below
             outcome["error"] = exc
 
-    thread = threading.Thread(target=work, name=f"llm-{model_id}", daemon=True)
+    # Run in a copy of the caller's context so context variables (the active domain pack)
+    # are visible inside the call.
+    ctx = contextvars.copy_context()
+    thread = threading.Thread(target=lambda: ctx.run(work), name=f"llm-{model_id}", daemon=True)
     thread.start()
     thread.join(timeout=seconds)
     if thread.is_alive():
@@ -155,7 +159,26 @@ def build_chat_model(spec: ModelSpec, temperature: float = 0.0) -> BaseChatModel
     )
 
 
+def traced_model(spec: ModelSpec, role: str, tier: str = "standard") -> BaseChatModel:
+    """A chat model whose every call is recorded (observability.llm_calls)."""
+    from watchdog_backend.observability.llm import LLMTracer
+
+    model = build_chat_model(spec)
+    model.callbacks = [LLMTracer(role, spec.id, tier)]
+    return model
+
+
 @lru_cache
 def get_chat_model(role: str = "default") -> tuple[BaseChatModel, ModelSpec]:
     spec = model_for_role(role)
-    return build_chat_model(spec), spec
+    return traced_model(spec, role), spec
+
+
+@lru_cache
+def get_light_model(role: str) -> tuple[BaseChatModel, ModelSpec] | None:
+    """The light tier for `role`, if LLM_LIGHT_MODEL is set (None otherwise)."""
+    value = get_settings().llm_light_model
+    if not value:
+        return None
+    spec = ModelSpec.parse(value)
+    return traced_model(spec, role, tier="light"), spec

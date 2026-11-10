@@ -1,7 +1,7 @@
-.PHONY: secrets watch eval eval-report up down logs ps test lint fmt check migrate data knowledge seed psql reset-db
+.PHONY: secrets users watch eval eval-report up down logs ps test lint fmt check migrate data knowledge seed psql reset-db
 
 secrets:       ## Add any missing generated secrets to .env (never overwrites existing ones)
-	@for k in OPERATIONS_MCP_BACKEND_TOKEN OPERATIONS_MCP_EXTERNAL_TOKEN ENTERPRISE_API_KEY; do \
+	@for k in OPERATIONS_MCP_BACKEND_TOKEN OPERATIONS_MCP_EXTERNAL_TOKEN ENTERPRISE_API_KEY ADMIN_PASSWORD DEMO_PASSWORD; do \
 	  grep -qE "^$$k=.+" .env || { sed -i "/^$$k=$$/d" .env; echo "$$k=$$(openssl rand -hex 24)" >> .env; echo "added $$k"; }; \
 	done
 
@@ -20,13 +20,16 @@ ps:
 migrate:       ## Apply database migrations
 	docker compose run --rm migrate
 
-data:          ## Generate the synthetic dataset (seed 42) and load it into the database
+data:          ## Generate every enabled pack's synthetic dataset (seed 42) and load it
 	cd backend && uv run python -m watchdog_backend.generator --load
 
-knowledge:     ## Ingest the domain pack's policy documents into the knowledge base
+knowledge:     ## Ingest every enabled pack's policy documents into the knowledge base
 	cd backend && uv run python -m watchdog_backend.knowledge ingest
 
-seed: data knowledge   ## Everything a fresh database needs
+users:         ## Create the admin and the demo accounts (passwords from .env: make secrets)
+	cd backend && uv run python -m watchdog_backend.identity seed
+
+seed: data knowledge users   ## Everything a fresh database needs
 
 eval-retrieval: ## Retrieval benchmark (no LLM): hit@k and MRR per method
 	cd backend && uv run python -m watchdog_backend.knowledge evaluate
@@ -34,9 +37,9 @@ eval-retrieval: ## Retrieval benchmark (no LLM): hit@k and MRR per method
 watch:         ## Evaluate the KPI monitors once and update alerts
 	cd backend && uv run python -m watchdog_backend.watch
 
-eval:          ## Full evaluation (isolated <db>_eval database). MODELS / SEEDS overridable
-	cd backend && uv run python -m watchdog_backend.evaluation run \
-	  --models $${MODELS:-ollama:qwen2.5:7b} --seeds $${SEEDS:-42,7,1234}
+eval:          ## Full evaluation (isolated <db>_eval_<pack> database). DOMAIN / MODELS / SEEDS overridable
+	cd backend && uv run python -m watchdog_backend.evaluation run --domain $${DOMAIN:-insurance_claims} \
+	  --db-suffix eval_$${DOMAIN:-insurance_claims} --models $${MODELS:-ollama:qwen2.5:7b} --seeds $${SEEDS:-42,7,1234}
 
 eval-report:   ## Rebuild docs/evaluation_report.md from all saved evaluation runs
 	cd backend && uv run python -m watchdog_backend.evaluation report $$(ls -d ../evaluation/results/2*/ | sort)

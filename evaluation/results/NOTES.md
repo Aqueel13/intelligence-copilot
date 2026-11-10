@@ -59,6 +59,15 @@ the fixed code:
    4,096 because reasoning models count hidden reasoning against it); the largest legitimate
    structured output measured was 551 tokens.
 
+10. **Found by the new observability page (M8): parallel assessment lost its context.** The
+   assessor's worker threads copied their context inside the worker (an empty context), not
+   from the investigation's thread. Every assessor call was therefore unattributed in the
+   traces, and in a non-default pack the assessor's evidence descriptions and upgrade reasons
+   used the default pack's wording ("claims" instead of "invoices", outcome ids instead of
+   labels). Scoring is structural, so the procure-to-pay results above are unaffected; the
+   wording in those runs' assessor prompts was. Context is now copied at submit time, with a
+   regression test.
+
 **Not yet re-run (provider quota).** The cloud runs started at 14:43, a minute before fix 2
 was applied, so the three Groq models' `broker_channel` results predate it; their low "remedy
 recommended" counts on that question reflect the bug, not the models. The local model was

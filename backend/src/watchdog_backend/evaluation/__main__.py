@@ -25,6 +25,15 @@ def cmd_run(args: argparse.Namespace) -> None:
 
     db = use_eval_database(args.db_suffix)  # before other app imports read settings
     from watchdog_backend.config import get_settings
+    from watchdog_backend.domain.pack import use_domain
+
+    domain = args.domain or get_settings().domain_pack
+    with use_domain(domain):
+        _run(args, db, domain, load_seed)
+
+
+def _run(args: argparse.Namespace, db: str, domain: str, load_seed) -> None:
+    from watchdog_backend.config import get_settings
     from watchdog_backend.evaluation import suites
 
     # Free tiers cap tokens per minute; the SDKs wait for Retry-After, so allow more attempts.
@@ -39,6 +48,7 @@ def cmd_run(args: argparse.Namespace) -> None:
     meta = {
         "started": datetime.now().isoformat(timespec="seconds"),
         "database": db,
+        "domain": domain,
         "models": models,
         "seeds": seeds,
         "suites": sorted(chosen),
@@ -57,7 +67,7 @@ def cmd_run(args: argparse.Namespace) -> None:
         log(f"seed {seed}: loading data")
         dataset = load_seed(seed)
         if "whatif" in chosen:
-            for rec in suites.whatif_suite(seed, dataset):
+            for rec in suites.whatif_suite(seed, dataset, spec):
                 emit(rec)
         if "retrieval" in chosen and i == 0:  # documents do not depend on the seed
             for rec in suites.retrieval_suite():
@@ -100,6 +110,7 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run")
+    r.add_argument("--domain", default=None, help="domain pack (default: DOMAIN_PACK)")
     r.add_argument("--models", default="ollama:qwen2.5:7b")
     r.add_argument("--seeds", default="42,7,1234")
     r.add_argument("--suites", default=",".join(SUITES))

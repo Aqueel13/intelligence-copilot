@@ -9,13 +9,12 @@ from collections import defaultdict, deque
 from typing import Any
 
 import pytest
-from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage
 
 from watchdog_backend.analytics.metrics import MetricsEngine
 from watchdog_backend.investigation import llm
 from watchdog_backend.investigation.graph import Deps, run
-from watchdog_backend.investigation.scoring import score
+from watchdog_backend.investigation.scoring import pack_ground_truth, score
 from watchdog_backend.knowledge.models import get_reranker
 from watchdog_backend.knowledge.service import get_retriever
 
@@ -178,7 +177,7 @@ def test_summary_with_invented_numbers_is_rewritten(result) -> None:
 
 
 def test_score_against_ground_truth(result) -> None:
-    s = score(result["hypotheses"])
+    s = score(result["hypotheses"], pack_ground_truth())
     assert s.found["RC1"] and s.found["RC3"]
     assert not s.decoys_accepted["DC1"]  # the override prevented accepting the decoy
 
@@ -208,18 +207,17 @@ def test_metric_route_uses_the_metrics_engine(db_engine, pack, kb) -> None:
 # --- API: streaming and persistence ----------------------------------------------------
 
 
-def test_stream_and_fetch_investigation(db_engine, kb, monkeypatch) -> None:
+def test_stream_and_fetch_investigation(db_engine, kb, monkeypatch, client_as) -> None:
     from watchdog_backend.api import investigations as api
     from watchdog_backend.investigation import service
     from watchdog_backend.llm.gateway import ModelSpec
-    from watchdog_backend.main import app
 
     model = _model()
     fake = lambda role: (model, ModelSpec("ollama", "scripted"))  # noqa: E731
     monkeypatch.setattr(service, "get_chat_model", fake)
     monkeypatch.setattr(api, "get_chat_model", fake)
 
-    client = TestClient(app)
+    client = client_as("m.khan")
     body = client.post(
         "/api/investigations/stream",
         json={
@@ -242,10 +240,8 @@ def test_stream_and_fetch_investigation(db_engine, kb, monkeypatch) -> None:
     assert any(r["investigation_id"] == inv_id for r in client.get("/api/investigations").json())
 
 
-def test_invalid_scope_is_rejected_before_streaming(db_engine) -> None:
-    from watchdog_backend.main import app
-
-    r = TestClient(app).post(
+def test_invalid_scope_is_rejected_before_streaming(client_as) -> None:
+    r = client_as("m.khan").post(
         "/api/investigations/stream",
         json={"question": "Why?????", "scope": {"filters": {"activity": ["QA"]}}},
     )
@@ -333,7 +329,7 @@ def timid_result(db_engine, pack, kb):
 
 
 def test_timid_model_still_finds_every_planted_cause(timid_result) -> None:
-    s = score(timid_result["hypotheses"])
+    s = score(timid_result["hypotheses"], pack_ground_truth())
     assert all(s.found.values()), s.found
     assert not any(s.decoys_accepted.values())
 
@@ -367,7 +363,7 @@ def test_rule_b_adds_separate_findings_never_the_decoy(timid_result) -> None:
 
 
 def test_refuting_model_cannot_suppress_strong_evidence(db_engine, pack, kb) -> None:
-    s = score(_run(db_engine, pack, _timid("refuted"))["hypotheses"])
+    s = score(_run(db_engine, pack, _timid("refuted"))["hypotheses"], pack_ground_truth())
     assert s.found["RC1"] and s.found["RC3"]
     assert not s.decoys_accepted["DC1"]
 

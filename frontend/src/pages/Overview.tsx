@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { api, type MetricResult, type Scope } from '../api/client'
+import { api, type DomainInfo, type MetricResult, type OverviewTile, type Scope } from '../api/client'
 import { BarList } from '../components/BarList'
 import { TrendChart } from '../components/TrendChart'
 import { Card, ErrorNote, Refetching, Segmented, StatTile, StatusBadge } from '../components/ui'
@@ -15,21 +15,20 @@ const single = (r: MetricResult | undefined) => r?.rows[0]
 export default function Overview() {
   const { domain, scope } = useDomainScope()
   if (!domain.data) return domain.error ? <ErrorNote error={domain.error} /> : null
-  return <OverviewBody scope={scope} slaDays={domain.data.sla_hours / 24} />
+  return <OverviewBody scope={scope} domain={domain.data} />
 }
 
-function OverviewBody({ scope, slaDays }: { scope: Scope; slaDays: number }) {
+function OverviewBody({ scope, domain }: { scope: Scope; domain: DomainInfo }) {
+  const slaDays = domain.sla_hours / 24
+  const plural = domain.case_label_plural
+  const { spotlight, tiles } = domain.overview
   const cases = useMetric(scope, 'case_count')
   const breach = useMetric(scope, 'sla_breach_rate')
   const cycle = useMetric(scope, 'avg_cycle_days')
   const p90 = useMetric(scope, 'p90_cycle_days')
-  const rework = useMetric(scope, 'rework_rate')
-  const docs = useMetric(scope, 'doc_request_rate')
-  const csat = useMetric(scope, 'avg_csat')
-  const response = useMetric(scope, 'survey_response_rate')
   const activities = useScoped('activities', scope, () => api.activities(scope))
 
-  const fetching = [cases, breach, cycle, rework, docs, csat, activities].some((q) => q.isFetching)
+  const fetching = [cases, breach, cycle, activities].some((q) => q.isFetching)
   const firstError = [cases, breach, cycle].find((q) => q.error)?.error
   if (firstError) return <ErrorNote error={firstError} />
 
@@ -38,7 +37,7 @@ function OverviewBody({ scope, slaDays }: { scope: Scope; slaDays: number }) {
 
   if (cases.data && n === 0) {
     return (
-      <Card title="No claims match these filters">
+      <Card title={`No ${plural} match these filters`}>
         <p className="text-sm text-ink-2">Widen the period or clear a filter.</p>
       </Card>
     )
@@ -50,14 +49,14 @@ function OverviewBody({ scope, slaDays }: { scope: Scope; slaDays: number }) {
         <div className="grid gap-4 md:grid-cols-[minmax(16rem,1.3fr)_repeat(3,minmax(0,1fr))]">
           <StatTile
             hero
-            label="SLA breach rate"
+            label={`${domain.sla_name} breach rate`}
             value={formatValue(single(breach.data)?.value ?? null, 'ratio')}
-            note={`Claims taking longer than ${slaDays} days from FNOL to Closed · ${formatCount(n)} claims`}
+            note={`${capitalise(plural)} taking longer than ${slaDays} days from ${domain.sla_start} to ${domain.sla_end} · ${formatCount(n)} ${plural}`}
           />
           <StatTile
             label="Average cycle time"
             value={formatValue(single(cycle.data)?.value ?? null, 'days')}
-            note={`90% close within ${formatValue(single(p90.data)?.value ?? null, 'days')}`}
+            note={`90% finish within ${formatValue(single(p90.data)?.value ?? null, 'days')}`}
           />
           <div className="rounded-xl border border-hairline bg-surface p-4">
             <div className="text-xs text-ink-2">Bottlenecks</div>
@@ -76,66 +75,58 @@ function OverviewBody({ scope, slaDays }: { scope: Scope; slaDays: number }) {
               </Link>
             </div>
           </div>
-          <StatTile
-            label="Customer satisfaction (CSAT)"
-            value={formatValue(single(csat.data)?.value ?? null, 'score_1_5')}
-            note={
-              <>
-                Out of 5 · {formatCount(single(csat.data)?.n ?? 0)} responses (
-                {formatValue(single(response.data)?.value ?? null, 'ratio')} response rate). Respondents only;
-                unhappy customers respond more often.
-              </>
-            }
-          />
+          {spotlight && <MetricTile scope={scope} tile={spotlight} />}
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatTile label="Claims" value={formatCount(n)} />
-          <StatTile
-            label="Verification rework"
-            value={formatValue(single(rework.data)?.value ?? null, 'ratio')}
-            note="Claims sent back by QA at least once"
-          />
-          <StatTile
-            label="Additional documents requested"
-            value={formatValue(single(docs.data)?.value ?? null, 'ratio')}
-            note="Customer asked for more documents at least once"
-          />
-          <StatTile
-            label="Need senior approval"
-            value={activities.data ? formatPercent(seniorShare(activities.data.internal, n)) : '—'}
-            note="Claims above ₹2,00,000"
-          />
+          <StatTile label={capitalise(plural)} value={formatCount(n)} />
+          {tiles.map((t) => (
+            <MetricTile key={t.metric} scope={scope} tile={t} />
+          ))}
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <MonthlyTrend scope={scope} metric="sla_breach_rate" title="SLA breach rate by month" />
+          <MonthlyTrend scope={scope} domain={domain} metric="sla_breach_rate" title={`${domain.sla_name} breach rate by month`} />
           <MonthlyTrend
             scope={scope}
+            domain={domain}
             metric="avg_cycle_days"
             title="Average cycle time by month"
             reference={{ y: slaDays, label: `SLA ${slaDays} days` }}
           />
         </div>
 
-        <Breakdown scope={scope} />
+        <Breakdown scope={scope} domain={domain} />
       </div>
     </Refetching>
   )
 }
 
-function seniorShare(activities: { activity: string; cases: number }[], total: number) {
-  const senior = activities.find((a) => a.activity === 'Senior Approval')
-  return senior && total ? senior.cases / total : 0
+const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+
+/** A KPI tile configured by the domain pack. Its note may use {n} and {secondary}. */
+function MetricTile({ scope, tile }: { scope: Scope; tile: OverviewTile }) {
+  const q = useMetric(scope, tile.metric)
+  const secondary = useScoped(`metric:${tile.secondary ?? 'none'}`, scope, () =>
+    tile.secondary ? api.metric(scope, tile.secondary, []) : Promise.resolve(null),
+  )
+  const row = single(q.data)
+  const second = secondary.data ? single(secondary.data) : undefined
+  const note = tile.note
+    ?.replace('{n}', formatCount(row?.n ?? 0))
+    .replace('{secondary}', second && secondary.data ? formatValue(second.value, secondary.data.unit) : '—')
+  return <StatTile label={tile.label} value={q.data ? formatValue(row?.value ?? null, q.data.unit) : '—'} note={note} />
 }
 
 function MonthlyTrend({
   scope,
+  domain,
   metric,
   title,
   reference,
 }: {
   scope: Scope
+  domain: DomainInfo
   metric: string
   title: string
   reference?: { y: number; label: string }
@@ -150,7 +141,7 @@ function MonthlyTrend({
     n: r.n,
   }))
   return (
-    <Card title={title} subtitle="By month the claim was opened (FNOL)">
+    <Card title={title} subtitle={`By month the ${domain.case_label} was opened (${domain.sla_start})`}>
       <TrendChart
         data={data}
         format={(v) => formatValue(v, unit)}
@@ -163,26 +154,11 @@ function MonthlyTrend({
   )
 }
 
-const BREAKDOWNS = [
-  { value: 'amount_band', label: 'Amount' },
-  { value: 'channel', label: 'Channel' },
-  { value: 'line_of_business', label: 'Line of business' },
-  { value: 'team', label: 'Team' },
-  { value: 'region', label: 'Region' },
-] as const
-type BreakdownDim = (typeof BREAKDOWNS)[number]['value']
-
-const BREAKDOWN_METRICS = [
-  { value: 'sla_breach_rate', label: 'SLA breach rate' },
-  { value: 'avg_cycle_days', label: 'Cycle time' },
-  { value: 'rework_rate', label: 'Rework' },
-  { value: 'doc_request_rate', label: 'Documents requested' },
-] as const
-type BreakdownMetric = (typeof BREAKDOWN_METRICS)[number]['value']
-
-function Breakdown({ scope }: { scope: Scope }) {
-  const [dim, setDim] = useState<BreakdownDim>('amount_band')
-  const [metric, setMetric] = useState<BreakdownMetric>('sla_breach_rate')
+function Breakdown({ scope, domain }: { scope: Scope; domain: DomainInfo }) {
+  const dims = Object.entries(domain.overview.breakdown_dimensions).map(([value, label]) => ({ value, label }))
+  const metrics = Object.entries(domain.overview.breakdown_metrics).map(([value, label]) => ({ value, label }))
+  const [dim, setDim] = useState(dims[0]?.value ?? 'month')
+  const [metric, setMetric] = useState(metrics[0]?.value ?? 'sla_breach_rate')
   const q = useMetric(scope, metric, [dim])
   const unit = q.data?.unit ?? 'ratio'
   const rows = q.data?.rows ?? []
@@ -193,17 +169,17 @@ function Breakdown({ scope }: { scope: Scope }) {
     n: r.n,
     lowSample: r.low_sample,
   }))
-  const metricLabel = BREAKDOWN_METRICS.find((m) => m.value === metric)!.label
-  const dimLabel = BREAKDOWNS.find((b) => b.value === dim)!.label
+  const metricLabel = metrics.find((m) => m.value === metric)?.label ?? metric
+  const dimLabel = dims.find((b) => b.value === dim)?.label ?? dim
 
   return (
     <Card
       title={`${metricLabel} by ${dimLabel.toLowerCase()}`}
-      subtitle="Groups with fewer than 100 claims are marked low sample and drawn lighter"
+      subtitle={`Groups with fewer than 100 ${domain.case_label_plural} are marked low sample and drawn lighter`}
       actions={
         <div className="flex flex-wrap gap-2">
-          <Segmented label="Metric" value={metric} onChange={setMetric} options={[...BREAKDOWN_METRICS]} />
-          <Segmented label="Group by" value={dim} onChange={setDim} options={[...BREAKDOWNS]} />
+          <Segmented label="Metric" value={metric} onChange={setMetric} options={metrics} />
+          <Segmented label="Group by" value={dim} onChange={setDim} options={dims} />
         </div>
       }
     >

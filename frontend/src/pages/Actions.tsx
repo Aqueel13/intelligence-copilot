@@ -4,7 +4,8 @@ import { Link } from 'react-router'
 import { actionsApi, type ActionRequest, type ActionStatus, type AuditEntry } from '../api/investigation'
 import { Card, ErrorNote, StatusBadge } from '../components/ui'
 import { formatCount, formatPercent } from '../lib/format'
-import { useActingUser } from '../lib/actingUser'
+import { useAuth } from '../lib/auth'
+import { useDomain } from '../lib/hooks'
 
 const STATUS: Record<ActionStatus, { status: 'good' | 'warning' | 'serious' | 'critical'; label: string }> = {
   proposed: { status: 'warning', label: 'Awaiting approval' },
@@ -62,7 +63,8 @@ export default function Actions() {
 }
 
 function RequestCard({ r }: { r: ActionRequest }) {
-  const { user } = useActingUser()
+  const system = useDomain().data?.system_of_record ?? 'the system of record'
+  const { me, can } = useAuth()
   const qc = useQueryClient()
   const [note, setNote] = useState('')
   const [showTrail, setShowTrail] = useState(false)
@@ -72,19 +74,22 @@ function RequestCard({ r }: { r: ActionRequest }) {
     qc.invalidateQueries({ queryKey: ['action', r.request_id] })
   }
   const decide = useMutation({
-    mutationFn: (decision: 'approved' | 'rejected') => actionsApi.decide(r.request_id, { user_id: user!.id, decision, note: note || undefined }),
+    mutationFn: (decision: 'approved' | 'rejected') => actionsApi.decide(r.request_id, { decision, note: note || undefined }),
     onSettled: refresh,
   })
-  const execute = useMutation({ mutationFn: () => actionsApi.execute(r.request_id, user!.id), onSettled: refresh })
+  const execute = useMutation({ mutationFn: () => actionsApi.execute(r.request_id), onSettled: refresh })
 
   // The UI only explains the rules; the backend enforces them (a forced click is still refused).
-  const canDecideReason = !user
-    ? 'Choose who you are acting as.'
-    : !r.approver_roles.includes(user.role)
-      ? `Needs ${r.approver_roles.join(' or ')}; you are acting as ${user.role}.`
-      : user.id === r.requested_by
-        ? 'Separation of duties: you proposed this action.'
-        : null
+  const role = me?.business_role ?? null
+  const canDecideReason = !me
+    ? 'Sign in first.'
+    : !can('decide_action')
+      ? `Your platform role (${me.user.platform_role}) cannot approve actions.`
+      : !role || !r.approver_roles.includes(role)
+        ? `Needs ${r.approver_roles.join(' or ')}; your role here is ${role ?? 'none'}.`
+        : me.user.user_id === r.requested_by
+          ? 'Separation of duties: you proposed this action.'
+          : null
   const i = r.impact
   const s = STATUS[r.status]
 
@@ -170,12 +175,12 @@ function RequestCard({ r }: { r: ActionRequest }) {
         <div className="mt-3 flex items-center gap-2 border-t border-hairline pt-3">
           <button
             onClick={() => execute.mutate()}
-            disabled={!user || execute.isPending}
+            disabled={!can('execute_action') || execute.isPending}
             className="rounded-md bg-series-1 px-3 py-1 text-xs font-semibold text-white disabled:opacity-40"
           >
             {execute.isPending ? 'Executing…' : 'Execute via Operations MCP'}
           </button>
-          <span className="text-[11px] text-ink-muted">Changes the claims administration system (mock).</span>
+          <span className="text-[11px] text-ink-muted">Changes {system}.</span>
         </div>
       )}
       {(decide.error || execute.error) && (

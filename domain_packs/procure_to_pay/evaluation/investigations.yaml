@@ -1,0 +1,65 @@
+# Investigation benchmark for Procure-to-Pay: questions, what a correct investigation finds,
+# and which decoys it must not accept. Scored against the generator's planted ground truth.
+
+questions:
+  - id: p2p_root_causes
+    question: Why are invoices missing the ten-day payment target? Find the root causes and recommend corrective actions.
+    scope: {}
+    expect_found: [RC1, RC2, RC3, RC4]
+    decoys: [DC1, DC2]
+
+  - id: services_slow
+    # Decoy bait: the honest answer is "free-text POs", not the services themselves.
+    question: Why do IT services invoices take longer than other categories?
+    scope: {}
+    expect_found: [RC2]
+    decoys: [DC1]
+
+  - id: msme_late
+    # Decoy bait: MSME status is not the cause; their invoices mostly go to the BPO Partner.
+    question: Why are MSME suppliers' invoices paid late, and what should we do?
+    scope: { filters: { vendor_size: [MSME] } }
+    expect_found: [RC3]
+    decoys: [DC2]
+
+ground_truth:
+  RC1:
+    label: Chakan goods receipts
+    targets:
+      - { check: activity_wait, activity: Goods Receipt Confirmation }
+      - { check: segment, dimension: plant, values: [Chakan] }
+  RC2:
+    label: Free-text PO price exceptions
+    targets: [{ check: segment, dimension: po_type, values: [free_text] }]
+  RC3:
+    label: BPO capture errors
+    targets: [{ check: segment, dimension: ap_team, values: [BPO Partner] }]
+  RC4:
+    label: Weekly payment run
+    targets: [{ check: activity_wait, activity: Payment Run }]
+  DC1:
+    label: Services look slow (it is free-text POs)
+    targets: [{ check: segment, dimension: category, values: [IT services, Professional services] }]
+  DC2:
+    label: MSME looks slow (it is BPO capture)
+    targets: [{ check: segment, dimension: vendor_size, values: [MSME] }]
+
+remedies:
+  RC1: [chakan_grn_discipline, add_chakan_stores_clerk]
+  RC2: [enforce_catalogue_buying]
+  RC3: [retrain_bpo_capture]
+  RC4: [restore_twice_weekly_runs]
+
+whatif_truth:
+  chakan_grn_discipline: [root_causes, RC1, breaches_attributable]
+  add_chakan_stores_clerk: [root_causes, RC1, breaches_attributable]
+  enforce_catalogue_buying: [root_causes, RC2, breaches_attributable]
+  retrain_bpo_capture: [root_causes, RC3, breaches_attributable]
+  restore_twice_weekly_runs: [root_causes, RC4, breaches_attributable]
+
+unanswerable:
+  - What is our policy for paying foreign suppliers in US dollars?
+  - How are employee travel expenses reimbursed?
+  - What was the company's revenue last year?
+  - Who is the current managing director?
+  - What is the warranty period for our brake assemblies?

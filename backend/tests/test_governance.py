@@ -21,6 +21,11 @@ MCP_TOKEN = "test-mcp-token"
 
 
 @pytest.fixture(autouse=True)
+def _accounts(accounts):
+    """Governance actors are accounts (seeded from each pack's governance.yaml)."""
+
+
+@pytest.fixture(autouse=True)
 def secrets(monkeypatch):
     s = get_settings()
     monkeypatch.setattr(s, "enterprise_api_key", ENTERPRISE_KEY)
@@ -200,10 +205,10 @@ def test_deleting_an_entry_breaks_the_chain(db_engine, proposed) -> None:
 
 
 @pytest.fixture
-def api(monkeypatch, executor):
+def api(monkeypatch, executor, client_as):
+    """client_as, with execution routed to an in-process stand-in for the MCP server."""
     from watchdog_backend.api import actions as actions_api
     from watchdog_backend.db import get_engine
-    from watchdog_backend.main import app
 
     async def fake_mcp(tool, arguments):  # what the real MCP server would do
         from uuid import UUID
@@ -213,33 +218,38 @@ def api(monkeypatch, executor):
             return gov.execute(c, agent, UUID(arguments["request_id"]), executor).model_dump()
 
     monkeypatch.setattr(actions_api, "call_operations_tool", fake_mcp)
-    return TestClient(app)
+    return client_as
 
 
 def test_api_full_flow(api) -> None:
-    rid = api.post(
-        "/api/actions",
-        json={"action_id": "retrain_team_b", "user_id": "m.khan", "rationale": "rework"},
+    khan, nair = api("m.khan"), api("p.nair")  # analyst; QA Lead (an approver)
+    rid = khan.post(
+        "/api/actions", json={"action_id": "retrain_team_b", "rationale": "rework"}
     ).json()["request_id"]
-    assert api.post(f"/api/actions/{rid}/execute", json={"user_id": "p.nair"}).status_code == 403
-    r = api.post(f"/api/actions/{rid}/decision", json={"user_id": "m.khan", "decision": "approved"})
-    assert r.status_code == 403
-    r = api.post(f"/api/actions/{rid}/decision", json={"user_id": "p.nair", "decision": "approved"})
+    assert nair.post(f"/api/actions/{rid}/execute").status_code == 403  # not approved yet
+    r = khan.post(f"/api/actions/{rid}/decision", json={"decision": "approved"})
+    assert r.status_code == 403  # not an approver (and the proposer)
+    r = nair.post(f"/api/actions/{rid}/decision", json={"decision": "approved"})
     assert r.json()["status"] == "approved"
-    r = api.post(f"/api/actions/{rid}/execute", json={"user_id": "p.nair"})
+    r = nair.post(f"/api/actions/{rid}/execute")
     assert r.json()["status"] == "executed"
-    detail = api.get(f"/api/actions/{rid}").json()
+    detail = khan.get(f"/api/actions/{rid}").json()
     events = [e["event"] for e in detail["audit"]]
     assert (
         events.count("action.execute_denied") == 1 and events.count("action.decision_denied") == 1
     )
     assert detail["impact"]["breaches_avoided"] > 0  # snapshot frozen at proposal
-    assert api.get("/api/audit/verify").json()["ok"]
+    assert khan.get("/api/audit/verify").json()["ok"]
 
 
-def test_api_rejects_unknown_users(api) -> None:
-    r = api.post("/api/actions", json={"action_id": "retrain_team_b", "user_id": "mallory"})
-    assert r.status_code == 403
+def test_api_requires_sign_in_and_role(api) -> None:
+    from watchdog_backend.main import app
+
+    body = {"action_id": "retrain_team_b"}
+    assert TestClient(app).post("/api/actions", json=body).status_code == 401
+    r = api("guest").post("/api/actions", json=body)
+    assert r.status_code == 403 and "viewer" in r.json()["detail"]
+    assert api("guest").get("/api/actions").status_code == 200  # viewers can read
 
 
 # --- Operations MCP server (in-process over ASGI, real bearer auth) -------------------

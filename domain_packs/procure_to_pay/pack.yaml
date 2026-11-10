@@ -1,0 +1,121 @@
+# Procure-to-Pay domain pack (invoice-to-pay).
+# The second pack: same engine, tables, agents and UI as Insurance Claims; everything specific
+# to accounts payable lives in this folder (plus its synthetic-data generator).
+
+domain: procure_to_pay
+display_name: Procure-to-Pay (invoice-to-pay, manufacturing)
+subject: an Indian auto-components manufacturer's accounts-payable (invoice-to-pay)
+version: 1
+
+case:
+  label: invoice
+  plural: invoices
+  id_prefix: INV
+  currency: INR
+  timezone: Asia/Kolkata
+
+sla:
+  name: Invoice-to-pay
+  target_hours: 240           # 10 calendar days, invoice received → payment released (AP-001 §3)
+  start_activity: Invoice Received
+  end_activity: Payment Released
+
+calendar:
+  workdays: [mon, tue, wed, thu, fri]
+  start: "09:00"
+  end: "18:00"
+
+dimensions:
+  - name: plant
+    label: Plant
+    source: attribute
+    values: [Chakan, Hosur, Manesar, Sanand, Sriperumbudur]
+  - name: category
+    label: Spend category
+    source: attribute
+    values: [Raw materials, Packaging, MRO, Logistics, IT services, Professional services]
+  - name: po_type
+    label: PO type
+    source: attribute
+    values: [catalogue, contract, free_text]
+  - name: ap_team
+    label: AP team
+    source: attribute
+    values: [AP Pune, AP Chennai, BPO Partner]
+  - name: vendor_size
+    label: Supplier size
+    source: attribute
+    values: [MSME, Large]
+  - name: amount_band
+    label: Invoice amount band
+    source: amount_band
+    bands:
+      - { label: "< ₹50K", max: 50000 }
+      - { label: "₹50K–₹2L", max: 200000 }
+      - { label: "₹2L–₹10L", max: 1000000 }
+      - { label: "> ₹10L" }
+  - name: month
+    label: Invoice month
+    source: opened_month
+
+activities:
+  - { name: Invoice Received }
+  - { name: Invoice Capture }
+  - { name: 3-Way Match }
+  - { name: Goods Receipt Confirmation }
+  - { name: Price Exception Resolution }
+  - { name: Invoice Approval, label: Budget Holder Approval }
+  - { name: Finance Controller Approval }
+  - { name: Payment Run }
+  - { name: Payment Released }
+
+analysis:
+  dimensions: [plant, category, po_type, ap_team, vendor_size, amount_band]
+  controls: [po_type, ap_team, amount_band]
+  outcomes:
+    price_exception:
+      label: price-exception rate
+      mechanism: a price exception
+      activity: Price Exception Resolution
+      when: present
+    recapture:
+      label: invoice re-capture rate
+      mechanism: an invoice re-capture
+      activity: Invoice Capture
+      when: repeated
+    grn_pending:
+      label: goods-receipt-pending rate
+      mechanism: a goods receipt still pending at matching
+      activity: Goods Receipt Confirmation
+      when: present
+  wait_targets:
+    Goods Receipt Confirmation: 24   # WH-201 §3: post GRNs within one working day of unloading
+    Payment Run: 96                  # TRS-401 §2: twice-weekly runs, so at most ~4 days' wait
+  late_handoff_hour: 15
+
+ui:
+  system_of_record: the ERP (mock)
+  overview:
+    spotlight:
+      metric: invoice_value
+      label: Invoice value processed
+      note: "{n} invoices in the period"
+    tiles:
+      - { metric: price_exception_rate, label: Price exceptions, note: Invoice price outside PO tolerance at least once }
+      - { metric: recapture_rate, label: Invoice re-capture, note: Capture errors sent back from matching }
+      - { metric: grn_pending_rate, label: Goods receipt pending, note: No GRN posted when the invoice reached matching }
+    breakdown_dimensions: { plant: Plant, category: Category, po_type: PO type, ap_team: AP team, vendor_size: Supplier size, amount_band: Amount }
+    breakdown_metrics: { sla_breach_rate: SLA breach rate, avg_cycle_days: Cycle time, price_exception_rate: Price exceptions, recapture_rate: Re-capture, grn_pending_rate: GRN pending }
+  investigate_examples:
+    - Why are invoices missing the ten-day payment target? Find the root causes and recommend corrective actions.
+    - Why do IT services invoices take longer than other categories?
+    - Why are MSME suppliers' invoices paid late?
+    - What is the price-exception rate by PO type?
+  knowledge_examples:
+    - When do we have to pay MSME suppliers?
+    - How often do payment runs happen, and what is the cutoff?
+    - When is a free-text purchase order allowed?
+    - What is the price tolerance for three-way matching?
+    - How quickly must the warehouse post a goods receipt?
+
+# No feedback survey in this pack (suppliers are not surveyed).

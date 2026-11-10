@@ -1,0 +1,31 @@
+# Governance for Procure-to-Pay: demo users, who may approve each action, and the rules.
+# Identity is self-asserted (demo) until login exists; the rules are enforced in the backend
+# and the Operations MCP server, exactly as for every pack.
+
+users:
+  - { id: v.kulkarni, name: V. Kulkarni, role: Chief Financial Officer }
+  - { id: r.pillai,   name: R. Pillai,   role: Treasury Head }
+  - { id: n.deshpande, name: N. Deshpande, role: Head of Procurement }
+  - { id: a.mehta,    name: A. Mehta,    role: Plant Head Chakan }
+  - { id: s.joshi,    name: S. Joshi,    role: AP Manager }
+  - { id: t.bose,     name: T. Bose,     role: Operations Analyst }
+
+approvals:
+  chakan_grn_discipline:
+    roles: [Plant Head Chakan]
+    basis: "WH-201 §5.1: the Plant Head owns GRN posting compliance"
+  add_chakan_stores_clerk:
+    roles: [Plant Head Chakan, Chief Financial Officer]
+    basis: "Headcount changes need the Plant Head or the CFO"
+  enforce_catalogue_buying:
+    roles: [Head of Procurement]
+    basis: "PRC-101 §5.1: the Head of Procurement approves SRM portal PO rules"
+  retrain_bpo_capture:
+    roles: [AP Manager]
+    basis: "AP-102 §5.3: the AP Manager owns the BPO quality plan"
+  restore_twice_weekly_runs:
+    roles: [Treasury Head, Chief Financial Officer]
+    basis: "TRS-401 §4.1: payment run changes need the Treasury Head or the CFO"
+
+rules:
+  separation_of_duties: true

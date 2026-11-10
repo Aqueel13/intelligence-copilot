@@ -22,9 +22,12 @@ class Settings(BaseSettings):
 
     # Domain packs: directory containing one folder per pack, and the active pack.
     domain_packs_dir: str = "../domain_packs"
-    domain_pack: str = "insurance_claims"
+    domain_pack: str = "insurance_claims"  # the default pack
+    domain_packs: str = "insurance_claims,procure_to_pay"  # all enabled packs (comma-separated)
     # Generated synthetic data and ground truth (git-ignored, reproducible from the seed).
     datasets_dir: str = "../datasets/generated"
+    # Saved evaluation runs (the model comparison page reads them live).
+    evaluation_results_dir: str = "../evaluation/results"
 
     # Knowledge base: local ONNX models (downloaded once into the cache directory).
     models_cache_dir: str = "../.cache/models"
@@ -35,6 +38,12 @@ class Settings(BaseSettings):
     # `llm_models` maps a role (e.g. "answer", "planner") to a model; others use the default.
     llm_default_model: str = "ollama:qwen2.5:7b"
     llm_models: dict[str, str] = {}
+    # A cheaper/faster model for simple requests (question routing, short policy lookups).
+    # Unset = everything uses the standard models. On one small local GPU a second local
+    # model mostly adds model-swap time; the light tier pays off on metered or quota-limited
+    # cloud providers (e.g. groq:llama-3.1-8b-instant).
+    llm_light_model: str | None = None
+    knowledge_cache: bool = True  # reuse answers to repeated / near-identical questions
     llm_timeout_seconds: float = 90.0  # per read (resets with every streamed token)
     llm_call_deadline_seconds: float = 180.0  # wall clock for a whole call
     llm_max_retries: int = 2  # provider-level retries (rate limits honour Retry-After)
@@ -48,6 +57,7 @@ class Settings(BaseSettings):
     llm_max_output_tokens: int = 4096
     ollama_base_url: str = "http://localhost:11434"
     groq_api_key: str | None = None
+    groq_daily_token_limit: int = 200_000  # free tier, per model (shown on Observability)
     gemini_api_key: str | None = None
 
     # Actions: Operations MCP server and the (mock) enterprise system it changes.
@@ -58,6 +68,14 @@ class Settings(BaseSettings):
     operations_mcp_backend_token: str = ""
     enterprise_api_url: str = "http://localhost:8201"
     enterprise_api_key: str = ""
+
+    # Accounts. Sessions slide: each request extends them by `session_hours`.
+    session_hours: int = 12
+    cookie_secure: bool = False  # True behind HTTPS (public deployment)
+    # Used only by `python -m watchdog_backend.identity seed` (make users).
+    admin_email: str = "admin@watchdog.local"
+    admin_password: str | None = None
+    demo_password: str | None = None
 
     # Comma-separated list of allowed browser origins.
     cors_origins: str = "http://localhost:5173"

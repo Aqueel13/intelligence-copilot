@@ -18,6 +18,7 @@ import { useMemo, useState } from 'react'
 import type { ActivityStats, ProcessMap as ProcessMapData } from '../api/client'
 import { formatCount, formatHours, formatPercent } from '../lib/format'
 import { StatusBadge, TableView } from './ui'
+import { useLabels } from '../lib/hooks'
 
 export type MapMode = 'frequency' | 'time'
 
@@ -41,11 +42,12 @@ interface ActivityNodeData extends Record<string, unknown> {
 const hidden = '!h-1.5 !w-1.5 !border-0 !bg-transparent'
 
 function TerminalNode({ data }: NodeProps<Node<ActivityNodeData>>) {
+  const L = useLabels()
   return (
     <div
       className="flex items-center justify-center rounded-full border border-axis bg-surface text-[11px] font-semibold text-ink-2"
       style={{ width: TERMINAL_W, height: TERMINAL_H }}
-      title={`${data.name}: ${formatCount(data.instances)} claims`}
+      title={`${data.name}: ${formatCount(data.instances)} ${L.many}`}
     >
       <Handle id="in" type="target" position={Position.Left} className={hidden} />
       {data.name}
@@ -55,6 +57,7 @@ function TerminalNode({ data }: NodeProps<Node<ActivityNodeData>>) {
 }
 
 function ActivityNode({ data, selected }: NodeProps<Node<ActivityNodeData>>) {
+  const L = useLabels()
   const customer = data.kind === 'customer_wait'
   return (
     <div
@@ -71,7 +74,7 @@ function ActivityNode({ data, selected }: NodeProps<Node<ActivityNodeData>>) {
       </div>
       <div className="tabular mt-0.5 text-[11px] text-ink-2">
         {data.mode === 'frequency'
-          ? `${formatCount(data.instances)}× · ${formatPercent(data.cases / data.totalCases, 0)} of claims`
+          ? `${formatCount(data.instances)}× · ${formatPercent(data.cases / data.totalCases, 0)} of ${L.many}`
           : customer
             ? 'Customer time'
             : `waits ${formatHours(data.meanWait)} on average`}
@@ -182,6 +185,7 @@ export function ProcessMap({
   activities: ActivityStats[]
   mode: MapMode
 }) {
+  const L = useLabels()
   const [hovered, setHovered] = useState<Hovered>(null)
   const bottlenecks = useMemo(
     () => new Set(activities.filter((a) => a.is_bottleneck).map((a) => a.activity)),
@@ -260,7 +264,7 @@ export function ProcessMap({
       <HoverDetail hovered={hovered} data={data} activities={activities} />
       <TableView
         caption="Process transitions"
-        columns={['From', 'To', 'Transitions', 'Claims', 'Median time', 'Mean time']}
+        columns={['From', 'To', 'Transitions', L.Many, 'Median time', 'Mean time']}
         rows={data.edges.map((e) => [
           e.source,
           e.target,
@@ -283,6 +287,7 @@ function HoverDetail({
   data: ProcessMapData
   activities: ActivityStats[]
 }) {
+  const L = useLabels()
   let content = <span className="text-ink-muted">Hover an activity or a transition for details.</span>
   if (hovered?.type === 'node') {
     const n = data.nodes.find((x) => x.activity === hovered.id)
@@ -291,12 +296,12 @@ function HoverDetail({
       content = (
         <>
           <b className="text-ink">{n.activity}</b> · {formatCount(n.instances)} occurrences in{' '}
-          {formatCount(n.cases)} claims · mean wait {formatHours(n.mean_wait_hours)} · mean work{' '}
+          {formatCount(n.cases)} {L.many} · mean wait {formatHours(n.mean_wait_hours)} · mean work{' '}
           {formatHours(n.mean_work_hours)}
           {a && (
             <>
               {' '}
-              · claims with it breach {formatPercent(a.breach_rate_with)}
+              · {L.many} with it breach {formatPercent(a.breach_rate_with)}
               {a.breach_rate_without !== null && <> vs {formatPercent(a.breach_rate_without)} without</>}
             </>
           )}
@@ -310,7 +315,7 @@ function HoverDetail({
           <b className="text-ink">
             {e.source} → {e.target}
           </b>{' '}
-          · {formatCount(e.transitions)} transitions in {formatCount(e.cases)} claims · median{' '}
+          · {formatCount(e.transitions)} transitions in {formatCount(e.cases)} {L.many} · median{' '}
           {formatHours(e.median_hours)} · mean {formatHours(e.mean_hours)}
         </>
       )

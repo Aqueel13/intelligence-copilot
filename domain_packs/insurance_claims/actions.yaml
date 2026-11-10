@@ -8,7 +8,8 @@
 #   cap_wait          waiting time before `activity` capped at `target_hours` for matching claims
 #   remove_repeats    remove loop time: every occurrence of `always`, and repeat occurrences of
 #                     `repeats`. `fraction: excess` removes only the share above the baseline
-#                     rate of comparable claims (`baseline_dimension`), not every loop.
+#                     rate of comparable claims (`baseline_dimension`), not every loop; the
+#                     rate is that of `outcome` (a loop declared in pack.yaml analysis.outcomes).
 # follow_up: the metric that should move if the action works, checked by the Watch layer after
 #            the action is executed (target in the metric's unit, `expect` = below | above).
 #
@@ -18,6 +19,7 @@
 
 economics:
   # ILLUSTRATIVE ASSUMPTIONS, editable. Shown alongside every ROI figure.
+  # Hourly rates (*_per_hour_inr) are referred to by name from action costs (`rate:`).
   cost_per_breach_inr: 2500        # complaint handling, goodwill gestures, follow-up calls
   staff_cost_per_hour_inr: 650     # loaded hourly cost of claims staff
   team_lead_cost_per_hour_inr: 900
@@ -65,7 +67,8 @@ actions:
     effort: medium
     lever: { kind: remove_repeats, always: ["Request Additional Documents"],
              repeats: ["Document Check"], filters: { channel: [broker] },
-             fraction: excess, baseline_dimension: channel }
+             fraction: excess, baseline_dimension: channel,
+             outcome: doc_requested }
     annual_cost:
       basis: Portal change and broker refresher sessions (one-off, spread over a year)
       fixed_inr: 400000
@@ -82,7 +85,8 @@ actions:
     policy_refs: ["SOP-105 §5.1", "OPS-301 §5"]
     effort: low
     lever: { kind: remove_repeats, repeats: ["Verification", "QA"],
-             filters: { team: [Team B] }, fraction: excess, baseline_dimension: team }
+             filters: { team: [Team B] }, fraction: excess, baseline_dimension: team,
+             outcome: rework }
     annual_cost:
       basis: Two days of training for 5 staff plus 30 days of peer review time
       fixed_inr: 150000

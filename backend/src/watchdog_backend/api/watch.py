@@ -1,16 +1,17 @@
 """Watch API: monitor status, alerts, follow-ups, manual runs and the next-month simulator."""
 
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
 
 from watchdog_backend.db import get_engine
 from watchdog_backend.domain.pack import get_pack
-from watchdog_backend.governance import service as gov
+from watchdog_backend.identity.deps import require
+from watchdog_backend.identity.service import Principal
 from watchdog_backend.watch.engine import RunSummary, run_monitors
 from watchdog_backend.watch.followups import FollowUp, follow_ups
 from watchdog_backend.watch.simulate import SimulatedMonth, SimulationError, simulate_next_month
@@ -103,22 +104,16 @@ def status() -> WatchStatus:
         )
 
 
-@router.post("/run", response_model=RunSummary)
+@router.post("/run", response_model=RunSummary, dependencies=[Depends(require("run_monitors"))])
 def run_now() -> RunSummary:
     with get_engine().connect() as conn:
         return run_monitors(conn, "manual")
 
 
-class AckIn(BaseModel):
-    user_id: str
-
-
 @router.post("/alerts/{alert_id}/acknowledge", response_model=Alert)
-def acknowledge(alert_id: UUID, body: AckIn) -> Alert:
-    try:
-        gov.user_actor(body.user_id)
-    except gov.GovernanceError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
+def acknowledge(
+    alert_id: UUID, who: Annotated[Principal, Depends(require("acknowledge_alert"))]
+) -> Alert:
     with get_engine().connect() as conn:
         row = (
             conn.execute(
@@ -126,7 +121,7 @@ def acknowledge(alert_id: UUID, body: AckIn) -> Alert:
                     SET status = 'acknowledged', acknowledged_by = :u, acknowledged_at = now(),
                         updated_at = now()
                     WHERE alert_id = :id AND status = 'open' RETURNING *"""),
-                {"id": alert_id, "u": body.user_id},
+                {"id": alert_id, "u": who.user.user_id},
             )
             .mappings()
             .one_or_none()
@@ -141,7 +136,11 @@ class LinkIn(BaseModel):
     investigation_id: UUID
 
 
-@router.post("/alerts/{alert_id}/investigation", response_model=Alert)
+@router.post(
+    "/alerts/{alert_id}/investigation",
+    response_model=Alert,
+    dependencies=[Depends(require("investigate"))],
+)
 def link_investigation(alert_id: UUID, body: LinkIn) -> Alert:
     with get_engine().connect() as conn:
         row = (
@@ -165,7 +164,11 @@ class SimulationResult(BaseModel):
     follow_ups: list[FollowUp]
 
 
-@router.post("/simulate-month", response_model=SimulationResult)
+@router.post(
+    "/simulate-month",
+    response_model=SimulationResult,
+    dependencies=[Depends(require("simulate_month"))],
+)
 def simulate() -> SimulationResult:
     """DEMO ONLY: append one synthetic month with executed actions applied, then re-run the
     monitors so alerts and follow-ups reflect it."""

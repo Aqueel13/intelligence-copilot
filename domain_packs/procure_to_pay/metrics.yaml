@@ -1,0 +1,110 @@
+# Metric catalogue for Procure-to-Pay (invoice-to-pay).
+# TRUSTED CONFIGURATION written by developers; the LLM only chooses a metric by name, plus
+# filters/grouping from the allowlisted dimensions. Same bases as every pack:
+#   cases → one row per invoice; events → one row per activity occurrence.
+
+metrics:
+  case_count:
+    base: cases
+    label: Invoices
+    description: Number of supplier invoices received in the period.
+    expression: count(*)
+    unit: count
+
+  sla_breach_rate:
+    base: cases
+    label: Invoice-to-pay breach rate
+    description: Share of invoices paid more than 10 calendar days after they were received.
+    expression: avg(breached::int)
+    unit: ratio
+
+  avg_cycle_days:
+    base: cases
+    label: Average invoice-to-pay time
+    description: Mean calendar days from invoice received to payment released.
+    expression: avg(cycle_hours) / 24
+    unit: days
+
+  median_cycle_days:
+    base: cases
+    label: Median invoice-to-pay time
+    description: Median calendar days from invoice received to payment released.
+    expression: percentile_cont(0.5) WITHIN GROUP (ORDER BY cycle_hours) / 24
+    unit: days
+
+  p90_cycle_days:
+    base: cases
+    label: 90th percentile invoice-to-pay time
+    description: 90% of invoices are paid within this many calendar days.
+    expression: percentile_cont(0.9) WITHIN GROUP (ORDER BY cycle_hours) / 24
+    unit: days
+
+  price_exception_rate:
+    base: cases
+    label: Price-exception rate
+    description: Share of invoices whose price was outside the PO tolerance at least once (a buyer had to resolve it).
+    expression: avg((activity_counts ? 'Price Exception Resolution')::int)
+    unit: ratio
+
+  recapture_rate:
+    base: cases
+    label: Invoice re-capture rate
+    description: Share of invoices captured again after matching found a data-entry error.
+    expression: avg((coalesce((activity_counts->>'Invoice Capture')::int, 0) > 1)::int)
+    unit: ratio
+
+  grn_pending_rate:
+    base: cases
+    label: Goods-receipt-pending rate
+    description: Share of invoices that reached matching before the goods receipt (GRN) was posted.
+    expression: avg((activity_counts ? 'Goods Receipt Confirmation')::int)
+    unit: ratio
+
+  controller_approval_rate:
+    base: cases
+    label: Finance Controller approval rate
+    description: Share of invoices above ₹10,00,000 that needed Finance Controller approval.
+    expression: avg((activity_counts ? 'Finance Controller Approval')::int)
+    unit: ratio
+
+  avg_invoice_amount:
+    base: cases
+    label: Average invoice amount
+    description: Mean invoice amount.
+    expression: avg(amount)
+    unit: inr
+
+  invoice_value:
+    base: cases
+    label: Invoice value
+    description: Total value of invoices received.
+    expression: sum(amount)
+    unit: inr
+
+  avg_wait_hours:
+    base: events
+    label: Average waiting time
+    description: Mean calendar hours an activity waited in queue after the previous activity finished. Group by activity to find bottlenecks.
+    expression: avg(wait_hours)
+    unit: hours
+
+  p90_wait_hours:
+    base: events
+    label: 90th percentile waiting time
+    description: 90% of activity instances waited less than this many calendar hours.
+    expression: percentile_cont(0.9) WITHIN GROUP (ORDER BY wait_hours)
+    unit: hours
+
+  avg_work_hours:
+    base: events
+    label: Average working time
+    description: Mean calendar hours from activity start to finish.
+    expression: avg(work_hours)
+    unit: hours
+
+  event_count:
+    base: events
+    label: Activity instances
+    description: Number of activity occurrences, including repeats.
+    expression: count(*)
+    unit: count

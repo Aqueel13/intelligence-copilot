@@ -5,11 +5,11 @@ import json
 import pandas as pd
 from sqlalchemy import Engine, text
 
-from watchdog_backend.generator.insurance_claims import GeneratedDataset
+from watchdog_backend.generator.common import FEEDBACK_COLUMNS, GeneratedDataset
 
 _CASE_COLS = ("case_id", "domain", "amount", "opened_at", "closed_at", "sla_due_at", "attributes")
 _EVENT_COLS = ("case_id", "seq", "activity", "resource", "started_at", "ended_at")
-_FEEDBACK_COLS = ("case_id", "sent_at", "responded_at", "csat", "nps", "comment")
+_FEEDBACK_COLS = FEEDBACK_COLUMNS
 
 
 def _none_if_missing(value: object) -> object:

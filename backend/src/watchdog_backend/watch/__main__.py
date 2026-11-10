@@ -11,23 +11,27 @@ import time
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from watchdog_backend.db import get_engine
+from watchdog_backend.domain.pack import available_domains, use_domain
 from watchdog_backend.watch.engine import run_monitors
 
 log = logging.getLogger("watchdog.watch")
 
 
 def once(trigger: str) -> None:
-    with get_engine().connect() as conn:
-        r = run_monitors(conn, trigger)
-    log.info(
-        "period=%s evaluated=%d opened=%d updated=%d resolved=%d (%d ms)",
-        r.period,
-        r.evaluated,
-        r.opened,
-        r.updated,
-        r.resolved,
-        r.duration_ms,
-    )
+    """Evaluate every enabled pack's monitors."""
+    for domain in available_domains():
+        with use_domain(domain), get_engine().connect() as conn:
+            r = run_monitors(conn, trigger)
+        log.info(
+            "%s: period=%s evaluated=%d opened=%d updated=%d resolved=%d (%d ms)",
+            domain,
+            r.period,
+            r.evaluated,
+            r.opened,
+            r.updated,
+            r.resolved,
+            r.duration_ms,
+        )
 
 
 def main() -> None:

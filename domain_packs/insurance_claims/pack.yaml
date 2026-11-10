@@ -3,10 +3,12 @@
 
 domain: insurance_claims
 display_name: Insurance Claims (Motor & Health, reimbursement)
+subject: an Indian general insurer's motor and health claims
 version: 1
 
 case:
   label: claim                # what one "case" is called in this domain
+  plural: claims
   id_prefix: CLM
   currency: INR
   timezone: Asia/Kolkata
@@ -64,6 +66,50 @@ activities:
   - { name: Senior Approval }
   - { name: Settlement }
   - { name: Closed }
+
+# What the investigation engine analyses.
+analysis:
+  dimensions: [line_of_business, channel, region, team, amount_band]   # scanned for segment effects
+  controls: [amount_band, line_of_business, channel]                   # confounders for every segment effect
+  outcomes:                       # loops compared across segments, besides `breached`
+    doc_requested:
+      label: additional-documents rate
+      mechanism: an additional-documents request
+      activity: Request Additional Documents
+      when: present
+    rework:
+      label: verification rework rate
+      mechanism: verification rework
+      activity: Verification
+      when: repeated
+  wait_targets: { Senior Approval: 24 }   # hours (POL-002 §5)
+  late_handoff_hour: 15
+
+ui:
+  system_of_record: the claims administration system (mock)
+  overview:
+    spotlight:
+      metric: avg_csat
+      label: Customer satisfaction (CSAT)
+      secondary: survey_response_rate
+      note: "Out of 5 · {n} responses ({secondary} response rate). Respondents only; unhappy customers respond more often."
+    tiles:
+      - { metric: rework_rate, label: Verification rework, note: Claims sent back by QA at least once }
+      - { metric: doc_request_rate, label: Additional documents requested, note: Customer asked for more documents at least once }
+      - { metric: senior_approval_rate, label: Need senior approval, note: "Claims above ₹2,00,000" }
+    breakdown_dimensions: { amount_band: Amount, channel: Channel, line_of_business: Line of business, team: Team, region: Region }
+    breakdown_metrics: { sla_breach_rate: SLA breach rate, avg_cycle_days: Cycle time, rework_rate: Rework, doc_request_rate: Documents requested }
+  investigate_examples:
+    - Why are claims breaching the five-day SLA? Find the root causes and recommend corrective actions.
+    - Why do health claims take longer than motor claims?
+    - What is the SLA breach rate by channel?
+    - Can senior approvals be delegated to team leads?
+  knowledge_examples:
+    - Who approves a claim of ₹3,00,000, and how fast?
+    - Can senior approvals be delegated? Under what conditions?
+    - What happens to work handed over late on a Friday?
+    - What QA rejection rate is acceptable for a verification team?
+    - Why do broker claims arrive without complete documents?
 
 approval:
   senior_threshold_inr: 200000          # claims above this need senior adjuster sign-off

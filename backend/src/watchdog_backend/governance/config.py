@@ -1,13 +1,11 @@
 """Governance configuration from the domain pack: demo users, roles, approval rules."""
 
 from functools import lru_cache
-from pathlib import Path
 
 import yaml
 from pydantic import BaseModel, ConfigDict
 
-from watchdog_backend.config import get_settings
-from watchdog_backend.domain.pack import get_pack
+from watchdog_backend.domain.pack import current_domain, pack_file
 
 
 class _Strict(BaseModel):
@@ -39,6 +37,11 @@ class Governance(_Strict):
 
 
 @lru_cache
-def get_governance() -> Governance:
-    path = Path(get_settings().domain_packs_dir) / get_pack().domain / "governance.yaml"
+def _governance(domain: str) -> Governance:
+    path = pack_file("governance.yaml", domain=domain)
     return Governance.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
+
+
+def get_governance(domain: str | None = None) -> Governance:
+    """A pack's governance (the active pack by default; cached per pack)."""
+    return _governance(domain or current_domain())

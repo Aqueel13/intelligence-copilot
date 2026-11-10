@@ -1,4 +1,4 @@
-"""A stand-in for the client's claims administration system.
+"""A stand-in for the client's systems of record (claims administration, ERP, HR).
 
 It is deliberately dumb: it records what it is told to do, keyed by the caller's idempotency
 reference, so retrying the same action request never creates a second change. In a real
@@ -19,7 +19,7 @@ from sqlalchemy import text
 from watchdog_backend.config import get_settings
 from watchdog_backend.db import get_engine
 
-app = FastAPI(title="Mock claims administration system", docs_url="/docs")
+app = FastAPI(title="Mock enterprise systems", docs_url="/docs")
 
 KINDS = {
     "approval-routing": "Approval routing rule",
@@ -27,6 +27,8 @@ KINDS = {
     "change-requests": "IT change request",
     "training-sessions": "Training session",
     "roster-shifts": "Roster shift",
+    "payment-schedules": "Payment run schedule",
+    "matching-rules": "Invoice matching rule",
 }
 
 

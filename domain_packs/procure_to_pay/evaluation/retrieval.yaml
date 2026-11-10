@@ -1,0 +1,55 @@
+# Retrieval benchmark for the Procure-to-Pay knowledge base. Each question lists the passage(s)
+# that answer it, as doc_key + a substring of the section heading. Phrased the way an AP or
+# operations manager would ask, not copied from the text.
+
+questions:
+  - q: How many days do we have to pay a supplier invoice?
+    relevant: [{ doc: AP-001, section: "3. Invoice-to-pay target" }]
+  - q: Does waiting for a goods receipt stop the payment clock?
+    relevant: [{ doc: AP-001, section: "3. Invoice-to-pay target" }]
+  - q: Why do we try to pay within ten days?
+    relevant: [{ doc: AP-001, section: "2. Why the target matters" }]
+  - q: What breach rate triggers a review by the head of accounts payable?
+    relevant: [{ doc: AP-001, section: "5. Monitoring" }]
+  - q: What is the legal deadline for paying a small enterprise supplier?
+    relevant: [{ doc: AP-002, section: "2. Statutory payment terms" }]
+  - q: What interest do we owe if we pay an MSME late?
+    relevant: [{ doc: AP-002, section: "2. Statutory payment terms" }]
+  - q: Do MSME invoices have a different processing target?
+    relevant: [{ doc: AP-002, section: "3. Our commitment" }]
+  - q: Who captures paper invoices?
+    relevant: [{ doc: AP-102, section: "2. Who captures" }, { doc: AP-002, section: "3. Our commitment" }]
+  - q: What re-capture rate is acceptable?
+    relevant: [{ doc: AP-102, section: "4. Capture accuracy" }]
+  - q: What happens if the outsourced capture team keeps making errors?
+    relevant: [{ doc: AP-102, section: "5. Quality management" }]
+  - q: What is the price tolerance when matching an invoice to the PO?
+    relevant: [{ doc: AP-103, section: "2. Tolerances" }]
+  - q: Who can widen the matching tolerance?
+    relevant: [{ doc: AP-103, section: "2. Tolerances" }]
+  - q: What happens to an invoice that arrives before the goods are receipted?
+    relevant: [{ doc: AP-103, section: "3. GRN pending" }, { doc: WH-201, section: "2. Posting the goods receipt" }]
+  - q: Who resolves a price mismatch and how fast?
+    relevant: [{ doc: AP-103, section: "4. Price exceptions" }]
+  - q: When is a free-text purchase order allowed?
+    relevant: [{ doc: PRC-101, section: "3. When a free-text PO is allowed" }]
+  - q: What must happen to services we keep buying on free-text POs?
+    relevant: [{ doc: PRC-101, section: "4. Repeat purchases" }, { doc: PRC-101, section: "6. Internal audit" }]
+  - q: Can procurement stop people raising free-text POs?
+    relevant: [{ doc: PRC-101, section: "4. Repeat purchases" }]
+  - q: How quickly must stores post a goods receipt?
+    relevant: [{ doc: WH-201, section: "3. Posting target" }]
+  - q: How many GRN clerks does Chakan have?
+    relevant: [{ doc: WH-201, section: "4. Staffing" }]
+  - q: What should a plant head do if goods receipts are posted late for two months?
+    relevant: [{ doc: WH-201, section: "5. Escalation" }]
+  - q: When do payment runs happen and what is the cut-off?
+    relevant: [{ doc: TRS-401, section: "2. Standard calendar" }]
+  - q: Why are payments only made on Fridays now?
+    relevant: [{ doc: TRS-401, section: "3. Change log" }]
+  - q: Who can approve restoring a payment run?
+    relevant: [{ doc: TRS-401, section: "4. Changes to the calendar" }]
+  - q: Who approves an invoice of fifteen lakh rupees?
+    relevant: [{ doc: APR-301, section: "1. Who approves" }]
+  - q: How long does a budget holder have to approve an invoice?
+    relevant: [{ doc: APR-301, section: "2. Targets" }, { doc: AP-001, section: "4. Internal stage targets" }]

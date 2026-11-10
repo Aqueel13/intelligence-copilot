@@ -164,10 +164,8 @@ def test_hallucinated_answer_is_not_grounded(conn, retriever) -> None:
 
 
 @pytest.fixture(scope="module")
-def client(kb) -> TestClient:
-    from watchdog_backend.main import app
-
-    return TestClient(app)
+def client(kb, client_as) -> TestClient:
+    return client_as("admin")
 
 
 def test_documents_endpoint(client) -> None:
@@ -224,13 +222,15 @@ class _FailingModel(FakeListChatModel):
     [(401, "rejected the API key"), (429, "rate limit"), (404, "model was not found")],
 )
 def test_provider_errors_become_clear_502s(client, monkeypatch, status, expected) -> None:
-    from watchdog_backend.api import knowledge as api
+    from watchdog_backend.knowledge import qa
     from watchdog_backend.llm.gateway import ModelSpec
 
     _ProviderError.status_code = status
     model = _FailingModel(responses=["unused"])
-    monkeypatch.setattr(api, "get_chat_model", lambda role: (model, ModelSpec("groq", "x")))
-    r = client.post("/api/knowledge/ask", json={"question": "What is the QA target?"})
+    monkeypatch.setattr(qa, "get_chat_model", lambda role: (model, ModelSpec("groq", "x")))
+    r = client.post(
+        "/api/knowledge/ask", json={"question": "What is the QA target?", "use_cache": False}
+    )
     assert r.status_code == 502
     assert "groq:x" in r.json()["detail"] and expected in r.json()["detail"]
 

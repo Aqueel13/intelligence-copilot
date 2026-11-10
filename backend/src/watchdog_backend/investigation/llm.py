@@ -6,6 +6,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, ValidationError
 
+from watchdog_backend.domain.pack import DomainPack
 from watchdog_backend.llm.gateway import invoke_with_deadline
 
 
@@ -26,7 +27,7 @@ class CheckOut(BaseModel):
     type: Literal["segment", "activity_wait", "weekday_handoff", "policy"]
     dimension: str | None = None
     value: str | None = None
-    outcome: Literal["breached", "doc_requested", "rework"] | None = None
+    outcome: str | None = None
     activity: str | None = None
     weekday: str | None = None
     query: str | None = None
@@ -110,27 +111,41 @@ def structured[T: BaseModel](
     raise ValueError(f"Model did not return a valid {schema.__name__}: {last}")
 
 
-ROUTER_SYSTEM = """Classify the user's question about claims operations.
+class Prompts:
+    """System prompts, worded for one domain pack."""
+
+    def __init__(self, pack: DomainPack) -> None:
+        subject = pack.subject
+        controls = " or ".join(pack.dimension(c).label.lower() for c in pack.analysis.controls[:2])
+        outcomes = ", ".join(pack.outcome_labels)
+        self.router = ROUTER_SYSTEM.format(subject=subject)
+        self.planner = PLANNER_SYSTEM.format(subject=subject, controls=controls, outcomes=outcomes)
+        self.assessor = ASSESSOR_SYSTEM.format(subject=subject)
+        self.recommender = RECOMMENDER_SYSTEM.format(subject=subject)
+        self.synthesis = SYNTHESIS_SYSTEM.format(subject=subject)
+
+
+ROUTER_SYSTEM = """Classify the user's question about the operations of {subject}.
 - investigation: asks WHY something happens, for root causes, or what to do about a problem
 - metric: asks for a number, rate, count, trend or breakdown, without asking why
 - policy: asks what a policy, rule, procedure, threshold or target says"""
 
-PLANNER_SYSTEM = """You are a senior operations analyst planning a root-cause investigation of an \
-insurance claims process. You are given an overview and SIGNALS found by a statistical scan.
+PLANNER_SYSTEM = """You are a senior operations analyst planning a root-cause investigation of \
+{subject} process. You are given an overview and SIGNALS found by a statistical scan.
 
 Write 3 to 6 distinct, testable hypotheses that could explain the problem in the question. \
 Base them on the signals. Include at least one hypothesis that a signal might be misleading \
-(for example a difference that could be explained by claim amount or channel mix).
+(for example a difference that could be explained by {controls} mix).
 
 For each hypothesis give 2 to 4 checks. Check types:
 - segment: compare a rate for one dimension value against the rest. Needs dimension, value and \
-outcome (breached, doc_requested or rework). Use only the dimension values listed.
+outcome (one of: {outcomes}). Use only the dimension values listed.
 - activity_wait: waiting time before an activity. Needs activity (use the exact name listed).
 - weekday_handoff: waiting after handoffs on a weekday. Needs weekday (Mon-Fri).
 - policy: search policies and procedures. Needs query (a short natural-language question).
 Every hypothesis should include one policy check."""
 
-ASSESSOR_SYSTEM = """You judge one hypothesis about an insurance claims process using ONLY the \
+ASSESSOR_SYSTEM = """You judge one hypothesis about {subject} process using ONLY the \
 evidence given. A hypothesis can be supported as a contributing cause even if it is not the \
 largest cause. Lines starting "Mechanism:" show whether the pattern goes with more SLA breaches. \
 Verdicts:
@@ -141,20 +156,23 @@ another factor (a confounder)
 - inconclusive: too little data, not statistically significant, or mixed evidence
 Quote the key numbers from the evidence in your reasoning. Never invent numbers."""
 
-RECOMMENDER_SYSTEM = """You recommend corrective actions for confirmed root causes in a claims \
-process. Choose ONLY from the action catalogue, by action_id. For each chosen action list the \
-hypothesis ids it addresses and a one-sentence rationale. Choose actions only for supported \
-hypotheses. Prefer actions with positive net value. Only choose an action with negative net \
-value if no positive alternative addresses that hypothesis, and say so in the rationale. When \
-two actions address the same cause, prefer the one with the higher net value. Do not invent \
+RECOMMENDER_SYSTEM = """You recommend corrective actions for confirmed root causes in \
+{subject} process. Choose ONLY \
+from the action catalogue, by action_id. For each chosen action list the hypothesis ids it \
+addresses and a one-sentence rationale. Choose actions only for supported hypotheses. Prefer \
+actions with positive net value. Only choose an action with negative net value if no \
+positive alternative addresses that hypothesis, and say so in the rationale. When two \
+actions address the same cause, prefer the one with the higher net value. Do not invent \
 actions."""
 
-SYNTHESIS_SYSTEM = """Write an executive summary of a root-cause investigation for a Head of \
-Claims, in 4 to 6 sentences of plain business English. State the problem, the confirmed root \
-causes in order of impact, anything that looked like a cause but was ruled out and why, and \
-the recommended actions with their estimated effect. Use ONLY numbers that appear in the facts \
-provided, written the same way and with the same units: keep "in the months analysed" and "a \
-year" figures distinct, and write money as given (₹ lakh). Do not use bullet points or headings."""
+SYNTHESIS_SYSTEM = """Write an executive summary of a root-cause investigation of \
+{subject} process for its \
+operations leadership, in 4 to 6 sentences of plain business English. State the problem, the \
+confirmed root causes in order of impact, anything that looked like a cause but was ruled \
+out and why, and the recommended actions with their estimated effect. Use ONLY numbers that \
+appear in the facts provided, written the same way and with the same units: keep "in the \
+months analysed" and "a year" figures distinct, and write money as given (₹ lakh). Do not \
+use bullet points or headings."""
 
 
 def plain(model: BaseChatModel, system: str, user: str) -> str:

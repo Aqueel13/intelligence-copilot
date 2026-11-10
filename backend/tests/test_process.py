@@ -149,10 +149,8 @@ def test_activity_filters_are_rejected(analyzer, conn) -> None:
 
 
 @pytest.fixture(scope="module")
-def client(db_engine) -> TestClient:
-    from watchdog_backend.main import app
-
-    return TestClient(app)
+def client(db_engine, client_as) -> TestClient:
+    return client_as("guest")
 
 
 @pytest.mark.parametrize(

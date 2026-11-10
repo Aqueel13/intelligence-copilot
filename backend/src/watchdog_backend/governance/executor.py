@@ -19,6 +19,8 @@ ROUTES = {
     "create_change_request": "change-requests",
     "schedule_training": "training-sessions",
     "update_roster": "roster-shifts",
+    "update_payment_schedule": "payment-schedules",
+    "update_matching_tolerance": "matching-rules",
 }
 
 
@@ -49,6 +51,6 @@ def http_executor(client: httpx2.Client | None = None):
         if r.status_code >= 400:
             raise ExecutionError(f"Enterprise system returned {r.status_code}: {r.text[:200]}")
         record = r.json()
-        return {"system": "claims-admin (mock)", "resource": resource, **record}
+        return {"system": "enterprise system (mock)", "resource": resource, **record}
 
     return execute

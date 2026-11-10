@@ -11,10 +11,12 @@ from sqlalchemy import Connection, text
 
 from watchdog_backend.analytics.metrics import MetricsEngine, _literal
 from watchdog_backend.analytics.process import ProcessQuery
+from watchdog_backend.domain.pack import DomainPack
 
 
 @dataclass
 class Frames:
+    pack: DomainPack
     cases: pd.DataFrame  # one row per case, dimensions as columns, outcome flags
     events: pd.DataFrame  # one row per event with wait/work hours and handoff time
     sla_hours: float
@@ -26,26 +28,27 @@ def load_frames(conn: Connection, metrics: MetricsEngine, scope: ProcessQuery) -
     pack = metrics.pack
     where, params = metrics.where_clause("cases", scope.filters, scope.period_from, scope.period_to)
     tz = _literal(pack.case.timezone)
-    attr_dims = [d.name for d in pack.dimensions if d.source == "attribute"]
-    band = metrics.dimensions["amount_band"].expression
-    attr_cols = ", ".join(f"attributes->>{_literal(d)} AS {d}" for d in attr_dims)
+    # Dimensions as columns (identifiers are validated by the pack; expressions come from the
+    # metrics engine), plus one boolean column per loop outcome declared in the pack.
+    columns = [
+        f"{metrics.dimensions[d.name].expression} AS {d.name}"
+        for d in pack.dimensions
+        if d.source in ("attribute", "amount_band")
+    ]
+    for name, o in pack.analysis.outcomes.items():
+        count = f"coalesce((activity_counts->>{_literal(o.activity)})::int, 0)"
+        columns.append(f"{count} {'> 0' if o.when == 'present' else '> 1'} AS {name}")
     cases = pd.read_sql(
         text(f"""
             SELECT case_id, amount, opened_at, closed_at, sla_due_at, cycle_hours, breached,
-                   {band} AS amount_band,
                    to_char(opened_at AT TIME ZONE {tz}, 'YYYY-MM') AS month,
-                   {attr_cols},
-                   coalesce((activity_counts->>'Request Additional Documents')::int, 0)
-                       AS doc_requests,
-                   coalesce((activity_counts->>'Verification')::int, 0) > 1 AS rework,
-                   activity_counts ? 'Senior Approval' AS senior_approval
+                   {", ".join(columns)}
             FROM operational.case_facts
             WHERE {" AND ".join(where)}
         """),
         conn,
         params=params,
     )
-    cases["doc_requested"] = cases["doc_requests"] > 0
     events = pd.read_sql(
         text(f"""
             SELECT case_id, seq, activity, resource, started_at, ended_at, handoff_at,
@@ -65,6 +68,7 @@ def load_frames(conn: Connection, metrics: MetricsEngine, scope: ProcessQuery) -
     else:
         months = 1.0
     return Frames(
+        pack=pack,
         cases=cases,
         events=events,
         sla_hours=pack.sla.target_hours,

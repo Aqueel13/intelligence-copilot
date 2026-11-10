@@ -1,0 +1,73 @@
+# KPI monitors for Procure-to-Pay. Evaluated by code, monthly (by invoice month), with the same
+# metrics engine as the dashboard and the investigation agent. Fields as in every pack:
+# direction, warning / critical thresholds (metric units), critical_months, group_by,
+# min_sample, policy_ref, question ({segment} = the segment's label).
+
+monitors:
+  invoice_to_pay_breach:
+    title: Invoice-to-pay breach rate
+    metric: sla_breach_rate
+    direction: above
+    warning: 0.25
+    critical: 0.30
+    min_sample: 100
+    policy_ref: "AP-001 §5.2"
+    question: Why are invoices missing the ten-day payment target? Find the root causes and recommend corrective actions.
+
+  msme_breach:
+    title: MSME invoices paid late
+    metric: sla_breach_rate
+    filters: { vendor_size: [MSME] }
+    direction: above
+    warning: 0.25
+    critical: 0.35
+    min_sample: 100
+    policy_ref: "AP-002 §4.1"
+    question: Why are MSME suppliers' invoices paid late, and what should we do?
+
+  payment_run_wait:
+    title: Waiting time before the payment run
+    metric: avg_wait_hours
+    filters: { activity: [Payment Run] }
+    direction: above
+    warning: 60
+    critical: 72
+    min_sample: 100
+    policy_ref: "TRS-401 §2.3"
+    question: Why do approved invoices wait so long for payment?
+
+  grn_wait:
+    title: Waiting time for goods receipts
+    metric: avg_wait_hours
+    filters: { activity: [Goods Receipt Confirmation] }
+    group_by: plant
+    direction: above
+    warning: 48
+    critical: 72
+    critical_months: 2
+    min_sample: 10
+    policy_ref: "WH-201 §5.2"
+    question: Why do invoices at {segment} wait so long for goods receipts?
+
+  price_exceptions:
+    title: Price-exception rate
+    metric: price_exception_rate
+    group_by: po_type
+    direction: above
+    warning: 0.10
+    critical: 0.20
+    min_sample: 100
+    policy_ref: "AP-103 §5.1"
+    question: Why do {segment} purchase orders so often cause price exceptions?
+
+  capture_rework:
+    title: Invoice re-capture rate
+    metric: recapture_rate
+    group_by: ap_team
+    direction: above
+    warning: 0.06
+    critical: 0.12
+    critical_months: 2
+    min_sample: 100
+    policy_ref: "AP-102 §5.2"
+    question: Why does {segment} so often have to re-capture invoices?

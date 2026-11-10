@@ -7,15 +7,13 @@ as saved hours, not as a skipped weekend). That limitation is stated with every 
 """
 
 from functools import lru_cache
-from pathlib import Path
 from typing import Literal
 
 import pandas as pd
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from watchdog_backend.config import get_settings
-from watchdog_backend.domain.pack import get_pack
+from watchdog_backend.domain.pack import current_domain, pack_file
 from watchdog_backend.investigation.data import Frames
 
 WEEKDAYS = {"Mon": 1, "Tue": 2, "Wed": 3, "Thu": 4, "Fri": 5, "Sat": 6, "Sun": 7}
@@ -39,8 +37,16 @@ class Lever(_Strict):
     repeats: list[str] = Field(default_factory=list)
     fraction: Literal["all", "excess"] = "all"
     baseline_dimension: str | None = None
+    # The loop outcome (pack analysis.outcomes) whose excess rate `fraction: excess` measures.
+    outcome: str | None = None
     weekday: str | None = None
     from_hour: int | None = None
+
+    @model_validator(mode="after")
+    def _excess_needs_outcome(self) -> "Lever":
+        if self.fraction == "excess" and not (self.outcome and self.baseline_dimension):
+            raise ValueError("fraction: excess needs `outcome` and `baseline_dimension`")
+        return self
 
 
 class AnnualCost(_Strict):
@@ -75,10 +81,23 @@ class Action(_Strict):
     operation: Operation
 
 
-class Economics(_Strict):
+class Economics(BaseModel):
+    """`cost_per_breach_inr` plus any number of hourly rates (`<name>_per_hour_inr`) that
+    action costs refer to by name."""
+
+    model_config = ConfigDict(extra="allow", frozen=True)
     cost_per_breach_inr: float
-    staff_cost_per_hour_inr: float
-    team_lead_cost_per_hour_inr: float
+
+    @model_validator(mode="after")
+    def _rates(self) -> "Economics":
+        for k, v in (self.model_extra or {}).items():
+            if not k.endswith("_per_hour_inr") or not isinstance(v, int | float):
+                raise ValueError(f"economics: {k!r} must be a number named *_per_hour_inr")
+        return self
+
+    @property
+    def rates(self) -> dict[str, float]:
+        return {k: float(v) for k, v in (self.model_extra or {}).items()}
 
 
 class ActionCatalogue(_Strict):
@@ -87,13 +106,15 @@ class ActionCatalogue(_Strict):
 
 
 @lru_cache
-def get_catalogue() -> ActionCatalogue:
-    pack = get_pack()
-    raw = yaml.safe_load(
-        (Path(get_settings().domain_packs_dir) / pack.domain / "actions.yaml").read_text("utf-8")
-    )
+def _catalogue(domain: str) -> ActionCatalogue:
+    raw = yaml.safe_load(pack_file("actions.yaml", domain=domain).read_text("utf-8"))
     raw["actions"] = {k: {"id": k, **v} for k, v in raw["actions"].items()}
     return ActionCatalogue.model_validate(raw)
+
+
+def get_catalogue() -> ActionCatalogue:
+    """The active pack's action catalogue (cached per pack)."""
+    return _catalogue(current_domain())
 
 
 # ----------------------------------------------------------------------------- what-if
@@ -132,7 +153,7 @@ def _excess_fraction(
     If the scope IS the segment (e.g. a broker-only investigation valuing a broker action),
     there are no comparable claims in scope; the baseline then comes from the population.
     Without one, the excess is unknown and reported as 0 rather than guessed."""
-    if lever.fraction == "all" or not lever.baseline_dimension:
+    if lever.fraction == "all" or not lever.baseline_dimension or not outcome:
         return 1.0
     cases = frames.cases
     seg = _case_mask(cases, lever.filters)
@@ -168,8 +189,7 @@ def removed_hours(
             | (ev["activity"].isin(lever.repeats) & (ev["occurrence"] > 1))
         ]
         hours = (sel["wait_hours"] + sel["work_hours"]).groupby(sel["case_id"]).sum()
-        outcome = "doc_requested" if lever.always else "rework"
-        return hours, _excess_fraction(frames, lever, outcome, population)
+        return hours, _excess_fraction(frames, lever, lever.outcome or "", population)
 
     # cap_handoff_wait: a late handoff on `weekday` still waits until the next working morning
     # (no weekend work is assumed), but then only for a typical queue: the backlog that builds
@@ -202,10 +222,7 @@ def evaluate_action(
     n = len(cases) or 1
     annualise = 12 / frames.months
 
-    rates = {
-        "staff_cost_per_hour_inr": economics.staff_cost_per_hour_inr,
-        "team_lead_cost_per_hour_inr": economics.team_lead_cost_per_hour_inr,
-    }
+    rates = economics.rates
     c = action.annual_cost
     cost = c.fixed_inr or 0.0
     if c.fixed_hours and c.rate:

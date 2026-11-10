@@ -1,5 +1,6 @@
 // Types and streaming client for investigations. Shapes mirror backend/investigation/graph.py.
 import type { Answer, MetricResult, Scope, Unit } from './client'
+import { apiFetch } from '../lib/domainStore'
 
 export type Verdict = 'supported' | 'refuted' | 'inconclusive'
 
@@ -151,7 +152,7 @@ export async function streamInvestigation(
   onEvent: (e: StreamEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const res = await fetch('/api/investigations/stream', {
+  const res = await apiFetch('/api/investigations/stream', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ question, scope }),
@@ -181,24 +182,18 @@ export async function streamInvestigation(
 
 export const investigationsApi = {
   recent: async (): Promise<InvestigationSummary[]> => {
-    const res = await fetch('/api/investigations')
+    const res = await apiFetch('/api/investigations')
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
     return res.json() as Promise<InvestigationSummary[]>
   },
   get: async (id: string): Promise<InvestigationRecord> => {
-    const res = await fetch(`/api/investigations/${id}`)
+    const res = await apiFetch(`/api/investigations/${id}`)
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
     return res.json() as Promise<InvestigationRecord>
   },
 }
 
 // ------------------------------------------------------------------ actions & governance
-
-export interface DemoUser {
-  id: string
-  name: string
-  role: string
-}
 
 export type ActionStatus = 'proposed' | 'approved' | 'rejected' | 'executing' | 'executed' | 'failed'
 
@@ -256,19 +251,18 @@ async function json<T>(res: Response): Promise<T> {
 }
 
 const send = (url: string, body: unknown) =>
-  fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+  apiFetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
 
 export const actionsApi = {
-  users: () => fetch('/api/governance/users').then((r) => json<DemoUser[]>(r)),
-  list: () => fetch('/api/actions').then((r) => json<ActionRequest[]>(r)),
-  get: (id: string) => fetch(`/api/actions/${id}`).then((r) => json<ActionRequest & { audit: AuditEntry[] }>(r)),
-  propose: (b: { action_id: string; user_id: string; rationale?: string; investigation_id?: string | null }) =>
+  list: () => apiFetch('/api/actions').then((r) => json<ActionRequest[]>(r)),
+  get: (id: string) => apiFetch(`/api/actions/${id}`).then((r) => json<ActionRequest & { audit: AuditEntry[] }>(r)),
+  propose: (b: { action_id: string; rationale?: string; investigation_id?: string | null }) =>
     send('/api/actions', b).then((r) => json<ActionRequest>(r)),
-  decide: (id: string, b: { user_id: string; decision: 'approved' | 'rejected'; note?: string }) =>
+  decide: (id: string, b: { decision: 'approved' | 'rejected'; note?: string }) =>
     send(`/api/actions/${id}/decision`, b).then((r) => json<ActionRequest>(r)),
-  execute: (id: string, user_id: string) => send(`/api/actions/${id}/execute`, { user_id }).then((r) => json<ActionRequest>(r)),
-  audit: () => fetch('/api/audit').then((r) => json<AuditEntry[]>(r)),
-  verify: () => fetch('/api/audit/verify').then((r) => json<AuditVerification>(r)),
+  execute: (id: string) => send(`/api/actions/${id}/execute`, {}).then((r) => json<ActionRequest>(r)),
+  audit: () => apiFetch('/api/audit').then((r) => json<AuditEntry[]>(r)),
+  verify: () => apiFetch('/api/audit/verify').then((r) => json<AuditVerification>(r)),
 }
 
 // ------------------------------------------------------------------ watch
@@ -350,10 +344,10 @@ export interface WatchStatus {
 }
 
 export const watchApi = {
-  status: () => fetch('/api/watch').then((r) => json<WatchStatus>(r)),
-  run: () => fetch('/api/watch/run', { method: 'POST' }).then((r) => json<RunSummary>(r)),
-  simulate: () => fetch('/api/watch/simulate-month', { method: 'POST' }).then((r) => json<{ month: { month: string } }>(r)),
-  acknowledge: (id: string, user_id: string) => send(`/api/watch/alerts/${id}/acknowledge`, { user_id }).then((r) => json<Alert>(r)),
+  status: () => apiFetch('/api/watch').then((r) => json<WatchStatus>(r)),
+  run: () => apiFetch('/api/watch/run', { method: 'POST' }).then((r) => json<RunSummary>(r)),
+  simulate: () => apiFetch('/api/watch/simulate-month', { method: 'POST' }).then((r) => json<{ month: { month: string } }>(r)),
+  acknowledge: (id: string) => send(`/api/watch/alerts/${id}/acknowledge`, {}).then((r) => json<Alert>(r)),
   link: (id: string, investigation_id: string) =>
     send(`/api/watch/alerts/${id}/investigation`, { investigation_id }).then((r) => json<Alert>(r)),
 }

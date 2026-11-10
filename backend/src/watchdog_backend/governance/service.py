@@ -25,10 +25,11 @@ from uuid import UUID
 from pydantic import BaseModel
 from sqlalchemy import Connection, text
 
-from watchdog_backend.domain.pack import get_pack
+from watchdog_backend.domain.pack import current_domain, get_pack
 from watchdog_backend.governance import audit
 from watchdog_backend.governance.audit import ActorType
 from watchdog_backend.governance.config import get_governance
+from watchdog_backend.identity.service import Principal
 from watchdog_backend.investigation.actions import Operation, get_catalogue
 
 Status = Literal["proposed", "approved", "rejected", "executing", "executed", "failed"]
@@ -109,16 +110,35 @@ def _deny(
 
 def _row(row: Any) -> ActionRequest:
     data = dict(row)
-    rule = get_governance().approvals.get(data["action_id"])
+    rule = get_governance(data["domain"]).approvals.get(data["action_id"])
     data["approval_basis"] = rule.basis if rule else None
     return ActionRequest(**data)
 
 
-def user_actor(user_id: str, via: str = "ui") -> Actor:
-    user = get_governance().user(user_id)
-    if user is None:
+def user_actor(user_id: str, via: str = "api") -> Actor:
+    """A known account as a governance actor, outside a web request (CLIs, tests). Its
+    business role is the one it holds in the active pack."""
+    from watchdog_backend.db import get_engine
+    from watchdog_backend.identity.service import get_user
+
+    with get_engine().connect() as conn:
+        user = get_user(conn, user_id)
+    if user is None or not user.active:
         raise GovernanceError("forbidden", f"Unknown user '{user_id}'")
-    return Actor(id=user.id, type="user", role=user.role, via=via)
+    return Actor(id=user.user_id, type="user", role=user.pack_roles.get(current_domain()), via=via)
+
+
+def principal_actor(p: "Principal") -> Actor:
+    """The signed-in person as a governance actor: their business role in the active pack
+    decides what they may approve. While an admin acts as someone else, the actor is that
+    person and `via` records who really did it."""
+    via = f"ui (admin {p.real.user_id} acting as {p.user.user_id})" if p.impersonating else "ui"
+    return Actor(
+        id=p.user.user_id,
+        type="user",
+        role=p.user.pack_roles.get(current_domain()),
+        via=via,
+    )
 
 
 def get(conn: Connection, request_id: UUID) -> ActionRequest:
@@ -226,7 +246,8 @@ def decide(
         raise deny(f"Action is already {req.status}.", "conflict")
     if actor.role not in req.approver_roles:
         raise deny(
-            f"{actor.id} ({actor.role}) may not decide this action; it needs: "
+            f"{actor.id} ({actor.role or 'no business role in this pack'}) may not decide "
+            f"this action; it needs: "
             f"{', '.join(req.approver_roles)}."
         )
     if get_governance().rules.separation_of_duties and actor.id == req.requested_by:

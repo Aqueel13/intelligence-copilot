@@ -38,19 +38,17 @@ def use_eval_database(suffix: str = "eval") -> str:
 
 
 def load_seed(seed: int):
-    """Replace the eval database's claims with the dataset for `seed`; (re)ingest documents."""
+    """Replace the eval database's data for the active pack with the dataset for `seed`;
+    (re)ingest the pack's documents."""
     from watchdog_backend.db import get_engine
     from watchdog_backend.domain.pack import get_pack
-    from watchdog_backend.generator.insurance_claims import (
-        GeneratorConfig,
-        InsuranceClaimsGenerator,
-    )
     from watchdog_backend.generator.loader import load_dataset
+    from watchdog_backend.generator.registry import generate
     from watchdog_backend.knowledge.ingest import ingest_directory
     from watchdog_backend.knowledge.models import get_embedder
     from watchdog_backend.knowledge.service import documents_dir
 
-    dataset = InsuranceClaimsGenerator(get_pack(), GeneratorConfig(seed=seed)).generate()
+    dataset = generate(get_pack(), seed=seed)
     load_dataset(get_engine(), dataset)
     with get_engine().begin() as conn:
         ingest_directory(conn, get_pack().domain, documents_dir(), get_embedder())

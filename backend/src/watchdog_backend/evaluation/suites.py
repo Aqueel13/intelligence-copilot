@@ -9,26 +9,23 @@
 import re
 import time
 import traceback
-from pathlib import Path
 from typing import Any
-
-import yaml
 
 from watchdog_backend.analytics.metrics import MetricsEngine
 from watchdog_backend.analytics.process import ProcessQuery
-from watchdog_backend.config import get_settings
 from watchdog_backend.db import get_engine
 from watchdog_backend.domain.pack import get_pack
 from watchdog_backend.evaluation.usage import UsageCounter
 from watchdog_backend.investigation.actions import evaluate_action, get_catalogue
 from watchdog_backend.investigation.data import load_frames
 from watchdog_backend.investigation.graph import Deps, run
-from watchdog_backend.investigation.scoring import score
+from watchdog_backend.investigation.scoring import evaluation_spec, parse_ground_truth, score
 from watchdog_backend.knowledge.answer import answer_question
 from watchdog_backend.knowledge.evaluation import evaluate, is_relevant, load_benchmark
 from watchdog_backend.knowledge.models import get_reranker
 from watchdog_backend.knowledge.service import benchmark_path, get_retriever
 from watchdog_backend.llm.gateway import ModelSpec, build_chat_model
+from watchdog_backend.observability.llm import LLMTracer
 
 ROLES = ("router", "planner", "assessor", "recommender", "synthesizer", "answer", "default")
 _ACCOUNT_ID = re.compile(r"org_[a-z0-9]{10,}")
@@ -40,18 +37,12 @@ def _redact(text: str) -> str:
 
 
 def load_spec() -> dict[str, Any]:
-    path = (
-        Path(get_settings().domain_packs_dir)
-        / get_pack().domain
-        / "evaluation"
-        / "investigations.yaml"
-    )
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
+    return evaluation_spec()
 
 
 def _model(spec: ModelSpec, counter: UsageCounter):
     model = build_chat_model(spec)
-    model.callbacks = [counter]
+    model.callbacks = [counter, LLMTracer("evaluation", spec.id)]
     return model
 
 
@@ -63,6 +54,7 @@ def investigation_run(model_id: str, seed: int, q: dict[str, Any], spec: dict[st
     model = _model(ModelSpec.parse(model_id), counter)
     record: dict[str, Any] = {
         "suite": "investigation",
+        "domain": get_pack().domain,
         "model": model_id,
         "seed": seed,
         "question_id": q["id"],
@@ -77,6 +69,7 @@ def investigation_run(model_id: str, seed: int, q: dict[str, Any], spec: dict[st
                 get_retriever(),
                 get_reranker(),
                 {role: (model, model_id) for role in ROLES},
+                {"purpose": "evaluation"},
             )
             state: dict[str, Any] = {}
             for _, update in run(
@@ -94,7 +87,7 @@ def investigation_run(model_id: str, seed: int, q: dict[str, Any], spec: dict[st
         return record
 
     hypotheses = state.get("hypotheses", [])
-    s = score(hypotheses)
+    s = score(hypotheses, parse_ground_truth(spec["ground_truth"]))
     expected = q["expect_found"]
     recommended = [r.action_id for r in state.get("recommendations", []) if r.recommended]
     remedies = spec["remedies"]
@@ -159,6 +152,7 @@ def qa_suite(model_id: str, spec: dict[str, Any], pause_s: float = 0.0) -> list[
         counter.reset()
         rec: dict[str, Any] = {
             "suite": "qa",
+            "domain": get_pack().domain,
             "model": model_id,
             "question": text,
             "answerable": bench is not None,
@@ -191,25 +185,17 @@ def qa_suite(model_id: str, spec: dict[str, Any], pause_s: float = 0.0) -> list[
 def retrieval_suite() -> list[dict]:
     with get_engine().connect() as conn:
         results = evaluate(conn, get_retriever(), load_benchmark(benchmark_path()))
-    return [{"suite": "retrieval", **r.model_dump()} for r in results]
+    domain = get_pack().domain
+    return [{"suite": "retrieval", "domain": domain, **r.model_dump()} for r in results]
 
 
-TRUTH_KEYS = {
-    "delegate_mid_value_approvals": ("delegation_scenario", "breaches_avoided"),
-    "add_senior_adjuster_capacity": ("root_causes", "RC1", "breaches_attributable"),
-    "enforce_broker_checklist": ("root_causes", "RC2", "breaches_attributable"),
-    "retrain_team_b": ("root_causes", "RC3", "breaches_attributable"),
-    "saturday_rota": ("root_causes", "RC4", "breaches_attributable"),
-}
-
-
-def whatif_suite(seed: int, dataset) -> list[dict]:
+def whatif_suite(seed: int, dataset, spec: dict[str, Any]) -> list[dict]:
     truth = dataset.summary()
     with get_engine().connect() as conn:
         frames = load_frames(conn, MetricsEngine(get_pack()), ProcessQuery())
     cat = get_catalogue()
     out = []
-    for action_id, keys in TRUTH_KEYS.items():
+    for action_id, keys in spec.get("whatif_truth", {}).items():
         actual: Any = truth
         for k in keys:
             actual = actual[k]
@@ -217,6 +203,7 @@ def whatif_suite(seed: int, dataset) -> list[dict]:
         out.append(
             {
                 "suite": "whatif",
+                "domain": get_pack().domain,
                 "seed": seed,
                 "action": action_id,
                 "estimate": round(est, 1),

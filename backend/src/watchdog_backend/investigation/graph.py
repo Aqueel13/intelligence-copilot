@@ -10,10 +10,11 @@ Rule overrides keep the LLM honest: a segment effect explained by a confounder c
 "supported", whatever the model says.
 """
 
+import contextvars
 import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, TypedDict
 
 from langchain_core.language_models import BaseChatModel
@@ -50,8 +51,8 @@ from watchdog_backend.knowledge.answer import Answer, answer_question
 from watchdog_backend.knowledge.models import Reranker
 from watchdog_backend.knowledge.retrieval import Retriever
 from watchdog_backend.llm.gateway import max_concurrency
+from watchdog_backend.observability.context import traced
 
-DIMENSIONS = ["line_of_business", "channel", "region", "team", "amount_band"]
 MAX_SIGNALS_FOR_PLANNER = 12
 MAX_HYPOTHESES = 9  # planner proposes ≤ 6; coverage may add strong signals up to this
 COVERAGE_MIN_STRENGTH = 0.08  # only strong signals are auto-added if the planner skips them
@@ -118,6 +119,8 @@ class Deps:
     retriever: Retriever
     reranker: Reranker
     models: dict[str, tuple[BaseChatModel, str]]  # role -> (model, model id)
+    # Observability: what every LLM call made by this run is attributed to.
+    trace: dict[str, str | None] = field(default_factory=dict)
 
     def model(self, role: str) -> tuple[BaseChatModel, str]:
         return self.models.get(role) or self.models["default"]
@@ -129,7 +132,9 @@ class Deps:
 def _timed(name: str, deps: Deps, role: str | None, fn: Callable[[InvestigationState], dict]):
     def node(state: InvestigationState) -> dict:
         started = time.perf_counter()
-        update = fn(state)
+        # Set per node: a node runs within one step of the stream, whatever thread it is on.
+        with traced(**deps.trace):
+            update = fn(state)
         step = Step(
             node=name,
             ms=(time.perf_counter() - started) * 1000,
@@ -223,10 +228,11 @@ def apply_coverage(
     return hypotheses, added
 
 
-def _facts(state: InvestigationState) -> str:
+def _facts(state: InvestigationState, cases_label: str) -> str:
     o = state["overview"]
     lines = [
-        f"Scope: {o.cases} claims over {o.months:.0f} months; SLA breach rate {o.breach_rate:.1%} "
+        f"Scope: {o.cases} {cases_label} over {o.months:.0f} months; "
+        f"SLA breach rate {o.breach_rate:.1%} "
         f"({o.breaches} breaches); average cycle time {o.mean_cycle_days:.1f} days vs a "
         f"{o.sla_days:.0f}-day SLA."
     ]
@@ -256,7 +262,9 @@ def build_graph(deps: Deps):
     pack = deps.metrics.pack
     analyzer = ProcessAnalyzer(deps.metrics)
     catalogue = get_catalogue()
-    targets = {"Senior Approval": pack.approval.senior_target_hours}
+    dimensions = pack.analysis.dimensions
+    targets = pack.analysis.wait_targets
+    prompts = llm.Prompts(pack)
     cache: dict[str, Any] = {}
 
     def frames_and_activities(state: InvestigationState):
@@ -264,7 +272,7 @@ def build_graph(deps: Deps):
             scope = _scope(state)
             cache["frames"] = load_frames(deps.conn, deps.metrics, scope)
             cache["activities"] = analyzer.activities(deps.conn, scope)
-            # A scoped question ("why are BROKER claims…") needs the rest of the business as
+            # A scoped question ("why are BROKER claims…?") needs the rest of the business as
             # its comparison group; the same period, without the dimension filters.
             cache["population"] = (
                 load_frames(
@@ -281,7 +289,7 @@ def build_graph(deps: Deps):
     def route(state: InvestigationState) -> dict:
         model, _ = deps.model("router")
         try:
-            out = llm.structured(model, llm.RouteOut, llm.ROUTER_SYSTEM, state["question"])
+            out = llm.structured(model, llm.RouteOut, prompts.router, state["question"])
             return {"route": out.route}
         except ValueError:
             return {"route": "investigation", "_note": "router failed; defaulted to investigation"}
@@ -323,12 +331,12 @@ def build_graph(deps: Deps):
     # -- investigation -----------------------------------------------------------------
     def scan_node(state: InvestigationState) -> dict:
         frames, activities = frames_and_activities(state)
-        result = scan(frames, activities, DIMENSIONS)
+        result = scan(frames, activities, dimensions)
         signals = list(result.signals)
         population = cache["population"]
         if population is not None:  # how does the scope compare with everyone else?
             for dim, values in _scope(state).filters.items():
-                if dim in DIMENSIONS and len(values) == 1:
+                if dim in dimensions and len(values) == 1:
                     signals += [
                         sig.model_copy(
                             update={
@@ -346,19 +354,20 @@ def build_graph(deps: Deps):
         model, _ = deps.model("planner")
         frames, activities = frames_and_activities(state)
         o = state["overview"]
-        values = {d: sorted(map(str, frames.cases[d].dropna().unique())) for d in DIMENSIONS}
+        values = {d: sorted(map(str, frames.cases[d].dropna().unique())) for d in dimensions}
         signals = "\n".join(
             f"- [{s.id}] {s.statement}" for s in state["signals"][:MAX_SIGNALS_FOR_PLANNER]
         )
         prompt = (
             f"Question: {state['question']}\n\n"
-            f"Overview: {o.cases} claims, SLA breach rate {o.breach_rate:.1%}, average cycle "
+            f"Overview: {o.cases} {pack.case.labels}, "
+            f"SLA breach rate {o.breach_rate:.1%}, average cycle "
             f"{o.mean_cycle_days:.1f} days, SLA {o.sla_days:.0f} days.\n\nSignals:\n{signals}\n\n"
             f"Dimension values: {values}\n"
             f"Activities: {[a.activity for a in activities.internal]}"
         )
         try:
-            planned = llm.structured(model, llm.PlanOut, llm.PLANNER_SYSTEM, prompt).hypotheses
+            planned = llm.structured(model, llm.PlanOut, prompts.planner, prompt).hypotheses
             failure = None
         except ValueError as exc:  # the coverage rule below still builds a plan from signals
             planned, failure = [], f"planner failed ({exc}); hypotheses built from signals"
@@ -388,7 +397,7 @@ def build_graph(deps: Deps):
 
     def gather(state: InvestigationState) -> dict:
         frames, activities = frames_and_activities(state)
-        values = {d: sorted(map(str, frames.cases[d].dropna().unique())) for d in DIMENSIONS}
+        values = {d: sorted(map(str, frames.cases[d].dropna().unique())) for d in dimensions}
         ctx = EvidenceContext(
             deps.conn,
             frames,
@@ -411,7 +420,7 @@ def build_graph(deps: Deps):
             out = llm.structured(
                 model,
                 llm.VerdictOut,
-                llm.ASSESSOR_SYSTEM,
+                prompts.assessor,
                 f"Hypothesis: {h.statement}\n\nEvidence:\n{evidence}",
             )
             verdict, confidence = out.verdict, out.confidence
@@ -464,7 +473,13 @@ def build_graph(deps: Deps):
         # actually serve concurrent requests (order is preserved).
         workers = max(1, min(max_concurrency(deps.model("assessor")[0]), len(hypotheses)))
         with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="assess") as pool:
-            assessed = list(pool.map(assess_one, hypotheses))
+            # Each task runs in its own copy of THIS thread's context (copied here, at submit
+            # time; copying inside the worker would copy the worker's empty context), so the
+            # active pack and the observability trace follow the work.
+            futures = [
+                pool.submit(contextvars.copy_context().run, assess_one, h) for h in hypotheses
+            ]
+            assessed = [f.result() for f in futures]
 
         # Upgrade rule B: never re-judge a sentence the model wrote. If strong evidence sits in
         # a hypothesis the model did not support, and no supported hypothesis covers the same
@@ -523,7 +538,7 @@ def build_graph(deps: Deps):
                 out = llm.structured(
                     model,
                     llm.RecommendOut,
-                    llm.RECOMMENDER_SYSTEM,
+                    prompts.recommender,
                     f"Supported hypotheses:\n{hyps}\n\nAction catalogue:\n{actions_text}",
                 )
                 valid_h = {h.id for h in supported}
@@ -556,15 +571,15 @@ def build_graph(deps: Deps):
 
     def synthesize(state: InvestigationState) -> dict:
         model, _ = deps.model("synthesizer")
-        facts = _facts(state)
+        facts = _facts(state, pack.case.labels)
         prompt = f"Question: {state['question']}\n\nFacts:\n{facts}"
-        summary = llm.plain(model, llm.SYNTHESIS_SYSTEM, prompt).strip()
+        summary = llm.plain(model, prompts.synthesis, prompt).strip()
         check = verify_numbers(summary, facts)
         note = None
         if not check.ok:  # one self-correction round, then show the result with flags
             retry = llm.plain(
                 model,
-                llm.SYNTHESIS_SYSTEM,
+                prompts.synthesis,
                 f"{prompt}\n\nYour previous summary used numbers that are not in the facts: "
                 f"{', '.join(check.unverified)}. Rewrite it using only numbers from the facts, "
                 f"with the same units (lakh, %, breaches in the period vs a year).",

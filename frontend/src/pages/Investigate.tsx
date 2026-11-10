@@ -15,15 +15,9 @@ import {
 import { Inline, MarkdownLite } from '../components/MarkdownLite'
 import { Card, ErrorNote, LowSample, StatTile, StatusBadge } from '../components/ui'
 import { formatCount, formatDays, formatDimensionValue, formatPercent, formatValue } from '../lib/format'
-import { useActingUser } from '../lib/actingUser'
-import { useDomainScope } from '../lib/hooks'
+import { useAuth } from '../lib/auth'
+import { useDomainScope, useLabels } from '../lib/hooks'
 
-const EXAMPLES = [
-  'Why are claims breaching the five-day SLA? Find the root causes and recommend corrective actions.',
-  'Why do health claims take longer than motor claims?',
-  'What is the SLA breach rate by channel?',
-  'Can senior approvals be delegated to team leads?',
-]
 
 const STEPS: { node: string; label: string }[] = [
   { node: 'route', label: 'Understand the question' },
@@ -40,6 +34,8 @@ type RunStatus = 'idle' | 'running' | 'done' | 'error'
 export default function Investigate() {
   const { scope, domain } = useDomainScope()
   const [params, setParams] = useSearchParams()
+  const { can } = useAuth()
+  const viewer = !can('investigate')
   const [question, setQuestion] = useState('')
   const [state, setState] = useState<InvestigationState>({})
   const [status, setStatus] = useState<RunStatus>('idle')
@@ -123,7 +119,7 @@ export default function Investigate() {
     e.preventDefault()
     run(question)
   }
-  const scopeLabel = describeScope(scope)
+  const scopeLabel = describeScope(scope, domain.data?.case_label_plural ?? "cases", domain.data?.sla_start ?? "start")
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
@@ -136,25 +132,26 @@ export default function Investigate() {
             <input
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder="e.g. Why are claims breaching the five-day SLA?"
+              placeholder={`e.g. ${domain.data?.investigate_examples[0] ?? ''}`}
               className="min-w-0 flex-1 rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-muted"
               aria-label="Question"
               maxLength={500}
             />
             <button
               type="submit"
-              disabled={status === 'running' || question.trim().length < 5}
+              disabled={viewer || status === 'running' || question.trim().length < 5}
+              title={viewer ? 'Your role can read investigations but not start them' : undefined}
               className="rounded-lg bg-series-1 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
             >
               {status === 'running' ? 'Investigating…' : 'Investigate'}
             </button>
           </form>
           <div className="mt-2 flex flex-wrap gap-1.5">
-            {EXAMPLES.map((ex) => (
+            {(domain.data?.investigate_examples ?? []).map((ex) => (
               <button
                 key={ex}
                 onClick={() => run(ex)}
-                disabled={status === 'running'}
+                disabled={viewer || status === 'running'}
                 className="rounded-full border border-hairline px-2.5 py-1 text-left text-xs text-ink-2 hover:bg-ghost disabled:opacity-50"
               >
                 {ex}
@@ -197,10 +194,10 @@ export default function Investigate() {
   )
 }
 
-function describeScope(scope: Scope): string {
+function describeScope(scope: Scope, many: string, start: string): string {
   const parts = Object.entries(scope.filters).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v.map(formatDimensionValue).join(', ')}`)
-  if (scope.period_from || scope.period_to) parts.push(`FNOL ${scope.period_from ?? 'start'} → ${scope.period_to ?? 'latest'}`)
-  return parts.length ? parts.join(' · ') : 'all claims'
+  if (scope.period_from || scope.period_to) parts.push(`${start} ${scope.period_from ?? 'start'} → ${scope.period_to ?? 'latest'}`)
+  return parts.length ? parts.join(' · ') : `all ${many}`
 }
 
 // ------------------------------------------------------------------------- progress
@@ -277,10 +274,11 @@ function Summary({ state }: { state: InvestigationState }) {
 }
 
 function OverviewStrip({ state }: { state: InvestigationState }) {
+  const L = useLabels()
   const o = state.overview!
   return (
     <div className="grid gap-4 sm:grid-cols-4">
-      <StatTile label="Claims in scope" value={formatCount(o.cases)} note={`${o.months.toFixed(0)} months`} />
+      <StatTile label={`${L.Many} in scope`} value={formatCount(o.cases)} note={`${o.months.toFixed(0)} months`} />
       <StatTile label="SLA breach rate" value={formatPercent(o.breach_rate)} note={`${formatCount(o.breaches)} breaches`} />
       <StatTile label="Average cycle time" value={formatDays(o.mean_cycle_days)} note={`SLA ${o.sla_days} days`} />
       <StatTile label="Signals found" value={formatCount(state.signals?.length ?? 0)} note="by the statistical scan" />
@@ -419,14 +417,13 @@ function Recommendations({ recs, hypotheses }: { recs: Recommendation[]; hypothe
 }
 
 function ProposeButton({ r }: { r: Recommendation }) {
-  const { user } = useActingUser()
+  const { can } = useAuth()
   const [params] = useSearchParams()
   const qc = useQueryClient()
   const propose = useMutation({
     mutationFn: () =>
       actionsApi.propose({
         action_id: r.action_id,
-        user_id: user!.id,
         rationale: r.rationale || undefined,
         investigation_id: params.get('id'),
       }),
@@ -445,7 +442,8 @@ function ProposeButton({ r }: { r: Recommendation }) {
     <span className="flex flex-wrap items-center gap-2">
       <button
         onClick={() => propose.mutate()}
-        disabled={!user || propose.isPending}
+        disabled={!can('propose_action') || propose.isPending}
+        title={can('propose_action') ? undefined : 'Your role cannot propose actions'}
         className="rounded-md border border-hairline px-2.5 py-1 text-xs font-semibold text-ink hover:bg-ghost disabled:opacity-40"
       >
         {propose.isPending ? 'Proposing…' : 'Propose for approval'}
@@ -456,6 +454,7 @@ function ProposeButton({ r }: { r: Recommendation }) {
 }
 
 function RecCard({ r, hypotheses }: { r: Recommendation; hypotheses: Hypothesis[] }) {
+  const L = useLabels()
   const i = r.impact
   return (
     <li className="rounded-lg border border-hairline p-3">
@@ -474,7 +473,7 @@ function RecCard({ r, hypotheses }: { r: Recommendation; hypotheses: Hypothesis[
         <Figure label="Breaches avoided" value={formatCount(Math.round(i.annual_breaches_avoided))} note={`a year (${formatCount(Math.round(i.breaches_avoided))} in period)`} />
         <Figure label="Breach rate" value={`${formatPercent(i.breach_rate_now)} → ${formatPercent(i.breach_rate_after)}`} />
         <Figure label="Net value / year" value={lakh(i.annual_net_inr)} note={`${lakh(i.annual_benefit_inr)} benefit − ${lakh(i.annual_cost_inr)} cost`} />
-        <Figure label="Claims affected" value={formatCount(Math.round(i.affected_claims))} note={i.cost_basis} />
+        <Figure label={`${L.Many} affected`} value={formatCount(Math.round(i.affected_claims))} note={i.cost_basis} />
       </div>
       {r.rationale && (
         <p className="mt-2 text-xs text-ink-2">
@@ -529,6 +528,7 @@ function Signals({ state }: { state: InvestigationState }) {
 }
 
 function MetricAnswer({ result }: { result: NonNullable<InvestigationState['metric_answer']> }) {
+  const L = useLabels()
   if (result.error) return <Card title="Couldn't compute that metric"><ErrorNote error={result.error} /></Card>
   return (
     <Card title={result.label} subtitle={result.description}>
@@ -536,7 +536,7 @@ function MetricAnswer({ result }: { result: NonNullable<InvestigationState['metr
         <tbody>
           {result.rows.map((r, i) => (
             <tr key={i} className="border-b border-hairline last:border-0">
-              <td className="py-1.5 pr-4 text-ink-2">{Object.values(r.group).map(formatDimensionValue).join(' · ') || 'All claims in scope'}</td>
+              <td className="py-1.5 pr-4 text-ink-2">{Object.values(r.group).map(formatDimensionValue).join(' · ') || `All ${L.many} in scope`}</td>
               <td className="py-1.5 pr-4 font-semibold text-ink">{formatValue(r.value, result.unit)}</td>
               <td className="py-1.5 text-xs text-ink-muted">
                 n = {formatCount(r.n)} {r.low_sample && <LowSample n={r.n} />}

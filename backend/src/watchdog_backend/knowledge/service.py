@@ -3,23 +3,25 @@
 from functools import lru_cache
 from pathlib import Path
 
-from watchdog_backend.config import get_settings
-from watchdog_backend.domain.pack import get_pack
+from watchdog_backend.domain.pack import current_domain, pack_file
 from watchdog_backend.knowledge.models import get_embedder, get_reranker
 from watchdog_backend.knowledge.retrieval import Retriever
 
 
 @lru_cache
+def _retriever(domain: str) -> Retriever:
+    return Retriever(domain, get_embedder(), get_reranker())
+
+
 def get_retriever() -> Retriever:
-    """Hybrid retriever; the reranker is attached so `hybrid_rerank` stays available."""
-    return Retriever(get_pack().domain, get_embedder(), get_reranker())
+    """The active pack's hybrid retriever; the reranker is attached so `hybrid_rerank` stays
+    available."""
+    return _retriever(current_domain())
 
 
 def documents_dir() -> Path:
-    s = get_settings()
-    return Path(s.domain_packs_dir) / get_pack().domain / "documents"
+    return pack_file("documents")
 
 
 def benchmark_path() -> Path:
-    s = get_settings()
-    return Path(s.domain_packs_dir) / get_pack().domain / "evaluation" / "retrieval.yaml"
+    return pack_file("evaluation", "retrieval.yaml")

@@ -7,6 +7,19 @@ export function useDomain() {
   return useQuery({ queryKey: ['domain'], queryFn: api.domain, staleTime: 60_000 })
 }
 
+/** What one case is called in the active pack ("claim" / "invoice"), and its SLA ends. */
+export function useLabels() {
+  const d = useDomain().data
+  const many = d?.case_label_plural ?? 'cases'
+  return {
+    one: d?.case_label ?? 'case',
+    many,
+    Many: many.charAt(0).toUpperCase() + many.slice(1),
+    start: d?.sla_start ?? 'start',
+    end: d?.sla_end ?? 'end',
+  }
+}
+
 /** Domain info + the URL-backed scope for its filter dimensions. */
 export function useDomainScope() {
   const domain = useDomain()

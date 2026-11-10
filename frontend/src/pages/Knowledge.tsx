@@ -4,24 +4,22 @@ import { api, type Answer, type RetrievedChunk, type SentenceCheck } from '../ap
 import { Inline, MarkdownLite } from '../components/MarkdownLite'
 import { Card, ErrorNote, Segmented, StatusBadge } from '../components/ui'
 import { formatPercent } from '../lib/format'
+import { useAuth } from '../lib/auth'
+import { useDomain } from '../lib/hooks'
 
-const EXAMPLES = [
-  'Who approves a claim of ₹3,00,000, and how fast?',
-  'Can senior approvals be delegated? Under what conditions?',
-  'What happens to work handed over late on a Friday?',
-  'What QA rejection rate is acceptable for a verification team?',
-  'Why do broker claims arrive without complete documents?',
-]
 
 type Mode = 'ask' | 'search'
 
 export default function Knowledge() {
+  const examples = useDomain().data?.knowledge_examples ?? []
   const [question, setQuestion] = useState('')
   const [mode, setMode] = useState<Mode>('ask')
   const [history, setHistory] = useState(false)
   const [active, setActive] = useState<number | null>(null)
 
-  const ask = useMutation({ mutationFn: (q: string) => api.ask(q, history) })
+  const ask = useMutation({
+    mutationFn: ({ q, fresh = false }: { q: string; fresh?: boolean }) => api.ask(q, history, !fresh),
+  })
   const search = useMutation({ mutationFn: (q: string) => api.search(q, history) })
 
   const submit = (q: string) => {
@@ -29,7 +27,7 @@ export default function Knowledge() {
     if (text.length < 3) return
     setQuestion(text)
     setActive(null)
-    if (mode === 'ask') ask.mutate(text)
+    if (mode === 'ask') ask.mutate({ q: text })
     else search.mutate(text)
   }
   const onSubmit = (e: FormEvent) => {
@@ -62,7 +60,7 @@ export default function Knowledge() {
             <input
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder="e.g. Who approves a claim of ₹3,00,000?"
+              placeholder={`e.g. ${examples[0] ?? ''}`}
               className="min-w-0 flex-1 rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-muted"
               aria-label="Question"
               maxLength={500}
@@ -76,7 +74,7 @@ export default function Knowledge() {
             </button>
           </form>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            {EXAMPLES.map((ex) => (
+            {examples.map((ex) => (
               <button
                 key={ex}
                 onClick={() => submit(ex)}
@@ -104,7 +102,17 @@ export default function Knowledge() {
           </Card>
         )}
         {mode === 'ask' && ask.data && !ask.isPending && (
-          <AnswerCard answer={ask.data} onCite={setActive} />
+          <>
+            <AnswerCard answer={ask.data} onCite={setActive} />
+            {ask.data.cached && (
+              <button
+                onClick={() => ask.mutate({ q: ask.data!.question, fresh: true })}
+                className="justify-self-start text-xs text-ink-2 underline underline-offset-2 hover:text-ink"
+              >
+                Ask again without the cache
+              </button>
+            )}
+          </>
         )}
         {mode === 'search' && search.error && (
           <Card>
@@ -192,13 +200,33 @@ function AnswerCard({ answer, onCite }: { answer: Answer; onCite: (n: number) =>
 
 function Meta({ answer }: { answer: Answer }) {
   return (
-    <p className="mt-4 border-t border-hairline pt-3 text-[11px] text-ink-muted">
+    <div className="mt-4 border-t border-hairline pt-3 text-[11px] text-ink-muted">
+      {(answer.cached || answer.tier === 'light') && (
+        <div className="mb-1.5 flex flex-wrap gap-2">
+          {answer.cached && (
+            <span className="rounded border border-hairline px-1.5 py-0.5 text-ink-2" title="Reused without a model call; invalidated when any document changes">
+              Cached answer
+              {answer.cache_similarity !== null && answer.cache_similarity < 1
+                ? ` · near-identical question (similarity ${answer.cache_similarity.toFixed(2)}): “${answer.cached_question}”`
+                : ''}
+              {answer.cached_at ? ` · first answered ${new Date(answer.cached_at).toLocaleString()}` : ''}
+            </span>
+          )}
+          {answer.tier === 'light' && (
+            <span className="rounded border border-hairline px-1.5 py-0.5 text-ink-2">
+              Light model · {answer.tier_reason}
+            </span>
+          )}
+        </div>
+      )}
+      <p>
       {answer.model} · retrieval {Math.round(answer.retrieval_ms)} ms · generation{' '}
-      {(answer.generation_ms / 1000).toFixed(1)} s
+      {(answer.generation_ms / 1000).toFixed(1)} s{answer.cached ? ' (originally)' : ''}
       {answer.model_citation_accuracy !== null && (
         <> · model cited correctly in {formatPercent(answer.model_citation_accuracy, 0)} of sentences</>
       )}
-    </p>
+      </p>
+    </div>
   )
 }
 
@@ -230,6 +258,7 @@ function SourceCard({ n, chunk, highlighted }: { n: number; chunk: RetrievedChun
 }
 
 function Library() {
+  const { can } = useAuth()
   const docs = useQuery({ queryKey: ['documents'], queryFn: api.documents })
   return (
     <div className="grid content-start gap-4">
@@ -250,7 +279,7 @@ function Library() {
           ))}
         </ul>
       </Card>
-      <Upload />
+      {can('manage_documents') && <Upload />}
     </div>
   )
 }

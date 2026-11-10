@@ -17,6 +17,11 @@ PERIOD = "2026-09"  # last month of the seed-42 dataset
 
 
 @pytest.fixture(autouse=True)
+def _accounts(accounts):
+    """Governance actors are accounts (seeded from each pack's governance.yaml)."""
+
+
+@pytest.fixture(autouse=True)
 def fresh_alerts(db_engine):
     """Alerts persist in the shared test database; each test starts without any."""
     with db_engine.begin() as c:
@@ -116,10 +121,8 @@ def test_runs_open_once_then_update(conn, db_engine, pack) -> None:
 
 
 @pytest.fixture
-def client(db_engine, kb) -> TestClient:
-    from watchdog_backend.main import app
-
-    return TestClient(app)
+def client(kb, client_as) -> TestClient:
+    return client_as("s.iyer")
 
 
 def test_watch_status_api(client) -> None:
@@ -129,14 +132,14 @@ def test_watch_status_api(client) -> None:
     assert any(a["monitor_id"] == "documents_requested" for a in body["alerts"])
 
 
-def test_acknowledge_rules(client) -> None:
+def test_acknowledge_rules(client, client_as) -> None:
     client.post("/api/watch/run")
     open_alert = next(a for a in client.get("/api/watch").json()["alerts"] if a["status"] == "open")
     url = f"/api/watch/alerts/{open_alert['alert_id']}/acknowledge"
-    assert client.post(url, json={"user_id": "mallory"}).status_code == 403
-    r = client.post(url, json={"user_id": "s.iyer"})
+    assert client_as("guest").post(url).status_code == 403  # viewers cannot act
+    r = client.post(url)
     assert r.status_code == 200 and r.json()["acknowledged_by"] == "s.iyer"
-    assert client.post(url, json={"user_id": "s.iyer"}).status_code == 409
+    assert client.post(url).status_code == 409
 
 
 # --- the closed loop: execute actions, a month passes, the Watch layer checks ----------

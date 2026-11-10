@@ -80,3 +80,39 @@ def kb(db_engine, pack):
 
     with db_engine.begin() as conn:
         return ingest_directory(conn, pack.domain, documents_dir(), get_embedder())
+
+
+TEST_PASSWORD = "test-password-123"
+
+
+@pytest.fixture(scope="session")
+def accounts(db_engine):
+    """Accounts for API tests: an admin, every governance.yaml user (analysts with their
+    business role per pack) and a read-only guest."""
+    from watchdog_backend.config import get_settings
+
+    s = get_settings()
+    s.admin_password = s.demo_password = TEST_PASSWORD
+    from watchdog_backend.identity.__main__ import seed
+
+    seed()
+    return db_engine
+
+
+@pytest.fixture(scope="session")
+def client_as(accounts):
+    """client_as("a.rao") -> a TestClient signed in as that user (a real session cookie)."""
+    from fastapi.testclient import TestClient
+
+    from watchdog_backend.identity.middleware import COOKIE
+    from watchdog_backend.identity.service import create_session
+    from watchdog_backend.main import app
+
+    def make(user_id: str) -> TestClient:
+        with accounts.connect() as conn:
+            token = create_session(conn, user_id)
+        client = TestClient(app)
+        client.cookies.set(COOKIE, token)
+        return client
+
+    return make

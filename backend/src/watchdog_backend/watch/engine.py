@@ -10,7 +10,6 @@
 
 import time
 from functools import lru_cache
-from pathlib import Path
 from typing import Literal
 
 import yaml
@@ -18,8 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Connection, text
 
 from watchdog_backend.analytics.metrics import MetricQuery, MetricsEngine
-from watchdog_backend.config import get_settings
-from watchdog_backend.domain.pack import get_pack
+from watchdog_backend.domain.pack import current_domain, get_pack, pack_file
 from watchdog_backend.lib_format import format_value
 
 Status = Literal["ok", "warning", "critical", "insufficient_data"]
@@ -43,10 +41,16 @@ class Monitor(BaseModel):
 
 
 @lru_cache
-def get_monitors() -> list[Monitor]:
-    path = Path(get_settings().domain_packs_dir) / get_pack().domain / "monitors.yaml"
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))["monitors"]
+def _monitors(domain: str) -> list[Monitor]:
+    raw = yaml.safe_load(pack_file("monitors.yaml", domain=domain).read_text(encoding="utf-8"))[
+        "monitors"
+    ]
     return [Monitor(id=k, **v) for k, v in raw.items()]
+
+
+def get_monitors() -> list[Monitor]:
+    """The active pack's monitors (cached per pack)."""
+    return _monitors(current_domain())
 
 
 class Point(BaseModel):

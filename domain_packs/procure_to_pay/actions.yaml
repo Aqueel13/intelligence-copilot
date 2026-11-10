@@ -1,0 +1,98 @@
+# Action catalogue for Procure-to-Pay. Same lever kinds as every pack (see the insurance pack's
+# actions.yaml for the full reference): cap_wait, remove_repeats, cap_handoff_wait.
+# The LLM chooses among these actions; the deterministic what-if engine values them.
+
+economics:
+  # ILLUSTRATIVE ASSUMPTIONS, editable. Shown alongside every ROI figure.
+  cost_per_breach_inr: 4000          # average 2% early-payment discount lost per late invoice,
+                                     # plus follow-up effort; MSME interest exposure not included
+  ap_staff_cost_per_hour_inr: 550
+  treasury_cost_per_hour_inr: 900
+
+actions:
+  chakan_grn_discipline:
+    title: Enforce same-day GRN posting at Chakan
+    description: >
+      Apply the goods receipt procedure at Chakan: a daily cut-off check of unposted
+      deliveries and GRN posting from the gate-in scan for catalogue and contract deliveries,
+      as piloted at Hosur.
+    policy_refs: ["WH-201 §5.2", "WH-201 §5.3", "WH-201 §3.1"]
+    effort: low
+    lever: { kind: cap_wait, activity: Goods Receipt Confirmation, target_hours: 24,
+             filters: { plant: [Chakan] } }
+    annual_cost:
+      basis: WMS change for gate-in GRN posting and supervisor time (one-off, spread over a year)
+      fixed_inr: 350000
+    follow_up: { metric: avg_wait_hours, expect: below, target: 24,
+                 filters: { activity: [Goods Receipt Confirmation], plant: [Chakan] } }
+    operation: { type: create_change_request,
+                 params: { system: Warehouse management (Chakan), change: Post GRN from gate-in scan } }
+
+  add_chakan_stores_clerk:
+    title: Back-fill the second GRN clerk at Chakan
+    description: >
+      Hire a stores clerk to restore Chakan's two-clerk GRN capacity, so goods receipts are
+      posted within one working day.
+    policy_refs: ["WH-201 §4.2", "WH-201 §5.2"]
+    effort: medium
+    lever: { kind: cap_wait, activity: Goods Receipt Confirmation, target_hours: 24,
+             filters: { plant: [Chakan] } }
+    annual_cost:
+      basis: One stores clerk, fully loaded
+      fixed_inr: 480000
+    follow_up: { metric: avg_wait_hours, expect: below, target: 24,
+                 filters: { activity: [Goods Receipt Confirmation], plant: [Chakan] } }
+    operation: { type: create_staffing_request, params: { role: Stores Clerk (Chakan), headcount: 1 } }
+
+  enforce_catalogue_buying:
+    title: Move repeat services onto rate contracts and block free-text POs
+    description: >
+      Apply the purchasing policy: put repeat IT and professional services on rate contracts
+      and block free-text POs in the SRM portal where a catalogue item or contract exists.
+    policy_refs: ["PRC-101 §4.1", "PRC-101 §4.2", "AP-103 §4.3"]
+    effort: medium
+    lever: { kind: remove_repeats, always: ["Price Exception Resolution"],
+             repeats: ["3-Way Match"], filters: { po_type: [free_text] },
+             fraction: excess, baseline_dimension: po_type, outcome: price_exception }
+    annual_cost:
+      basis: Sourcing effort for rate contracts and an SRM portal change (one-off, spread over a year)
+      fixed_inr: 600000
+    follow_up: { metric: price_exception_rate, expect: below, target: 0.10,
+                 filters: { po_type: [free_text] } }
+    operation: { type: create_change_request,
+                 params: { system: SRM portal, change: Block free-text POs where a contract exists } }
+
+  retrain_bpo_capture:
+    title: Activate the BPO Partner capture-quality plan
+    description: >
+      Trigger the contract's quality plan: targeted retraining on the error types found and
+      100% second-check of the BPO Partner's captures for 30 days.
+    policy_refs: ["AP-102 §5.2", "AP-102 §4.2"]
+    effort: low
+    lever: { kind: remove_repeats, repeats: ["Invoice Capture"],
+             filters: { ap_team: [BPO Partner] }, fraction: excess,
+             baseline_dimension: ap_team, outcome: recapture }
+    annual_cost:
+      basis: 30 days of second-checking (2 AP staff) plus training sessions
+      fixed_hours: 520
+      rate: ap_staff_cost_per_hour_inr
+    follow_up: { metric: recapture_rate, expect: below, target: 0.06,
+                 filters: { ap_team: [BPO Partner] } }
+    operation: { type: schedule_training,
+                 params: { team: BPO Partner, programme: Invoice capture accuracy } }
+
+  restore_twice_weekly_runs:
+    title: Restore the Tuesday payment run
+    description: >
+      End the interim suspension and return to twice-weekly payment runs (Tuesday and
+      Friday), so an approved invoice waits at most about four and a half days for payment.
+    policy_refs: ["TRS-401 §2.1", "TRS-401 §3.1", "TRS-401 §4.1"]
+    effort: low
+    lever: { kind: cap_wait, activity: Payment Run, target_hours: 96 }
+    annual_cost:
+      basis: 52 more runs × 4 hours of Treasury time, plus the working-capital cost of paying about 3 days earlier (illustrative ₹6 lakh)
+      fixed_inr: 787200
+    follow_up: { metric: avg_wait_hours, expect: below, target: 72,
+                 filters: { activity: [Payment Run] } }
+    operation: { type: update_payment_schedule,
+                 params: { run_days: [Tue, Fri], cutoff: "17:00 previous working day" } }

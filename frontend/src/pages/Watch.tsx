@@ -4,7 +4,8 @@ import { Link } from 'react-router'
 import { watchApi, type Alert, type Evaluation, type FollowUp, type MonitorStatus } from '../api/investigation'
 import { Card, ErrorNote, StatusBadge } from '../components/ui'
 import { formatMonth, formatValue } from '../lib/format'
-import { useActingUser } from '../lib/actingUser'
+import { useAuth } from '../lib/auth'
+import { useLabels } from '../lib/hooks'
 
 const STATUS: Record<MonitorStatus, { status: 'good' | 'warning' | 'critical' | 'serious'; label: string }> = {
   ok: { status: 'good', label: 'OK' },
@@ -34,6 +35,8 @@ function investigateHref(e: Evaluation, alertId?: string): string {
 }
 
 export default function Watch() {
+  const L = useLabels()
+  const { can } = useAuth()
   const qc = useQueryClient()
   const status = useQuery({ queryKey: ['watch'], queryFn: watchApi.status, refetchInterval: 30_000 })
   const refresh = () => {
@@ -62,14 +65,16 @@ export default function Watch() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => run.mutate()}
-              disabled={run.isPending}
+              disabled={run.isPending || !can('run_monitors')}
+              title={can('run_monitors') ? undefined : 'Your role cannot run monitors'}
               className="rounded-md border border-hairline px-3 py-1.5 text-xs font-semibold text-ink hover:bg-ghost disabled:opacity-50"
             >
               {run.isPending ? 'Checking…' : 'Run checks now'}
             </button>
             <button
               onClick={() => setConfirmSim(true)}
-              disabled={simulate.isPending}
+              disabled={simulate.isPending || !can('simulate_month')}
+              title={can('simulate_month') ? undefined : 'Admins only: it changes the data everyone sees'}
               className="rounded-md border border-hairline px-3 py-1.5 text-xs font-semibold text-ink hover:bg-ghost disabled:opacity-50"
             >
               {simulate.isPending ? 'Generating…' : 'Simulate next month'}
@@ -99,7 +104,7 @@ export default function Watch() {
         {confirmSim && (
           <div className="mt-3 rounded-md border border-hairline bg-ghost p-3 text-xs text-ink-2">
             <p>
-              <b className="text-ink">Demo only.</b> This appends one more month of <b>synthetic</b> claims from the same generator. Trends continue
+              <b className="text-ink">Demo only.</b> This appends one more month of <b>synthetic</b> {L.many} from the same generator. Trends continue
               (an untreated queue keeps getting worse) and every action executed so far is applied, so you can see whether it works. It changes
               the data every screen shows; <code>make seed</code> resets it.
             </p>
@@ -205,10 +210,10 @@ function Sparkline({ e }: { e: Evaluation }) {
 }
 
 function Alerts({ alerts, evaluations }: { alerts: Alert[]; evaluations: Evaluation[] }) {
-  const { user } = useActingUser()
+  const { can } = useAuth()
   const qc = useQueryClient()
   const ack = useMutation({
-    mutationFn: (id: string) => watchApi.acknowledge(id, user!.id),
+    mutationFn: (id: string) => watchApi.acknowledge(id),
     onSettled: () => qc.invalidateQueries({ queryKey: ['watch'] }),
   })
   const [showResolved, setShowResolved] = useState(false)
@@ -255,7 +260,7 @@ function Alerts({ alerts, evaluations }: { alerts: Alert[]; evaluations: Evaluat
                     )
                   )}
                   {a.status === 'open' && (
-                    <button onClick={() => ack.mutate(a.alert_id)} disabled={!user || ack.isPending} className="text-ink-2 underline underline-offset-2 disabled:opacity-50">
+                    <button onClick={() => ack.mutate(a.alert_id)} disabled={!can('acknowledge_alert') || ack.isPending} title={can('acknowledge_alert') ? undefined : 'Your role cannot acknowledge alerts'} className="text-ink-2 underline underline-offset-2 disabled:opacity-50">
                       Acknowledge
                     </button>
                   )}

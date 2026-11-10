@@ -1,19 +1,26 @@
-import { useQuery } from '@tanstack/react-query'
-import { NavLink, Outlet, useLocation } from 'react-router'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { api } from '../api/client'
 import { watchApi } from '../api/investigation'
 import { formatCount, formatDimensionValue, formatMonth } from '../lib/format'
-import { useActingUser } from '../lib/actingUser'
+import { authApi } from '../api/auth'
+import { useAuth } from '../lib/auth'
+import { useActiveDomain } from '../lib/domain'
+import { listDomains } from '../lib/domainStore'
 import { useDomainScope } from '../lib/hooks'
 import { monthsBetween } from '../lib/scope'
 
-const NAV: { to: string; label: string; ready: boolean; milestone?: string }[] = [
-  { to: '/watch', label: 'Watch', ready: true },
-  { to: '/overview', label: 'Overview', ready: true },
-  { to: '/process', label: 'Process', ready: true },
-  { to: '/knowledge', label: 'Knowledge', ready: true },
-  { to: '/investigate', label: 'Investigate', ready: true },
-  { to: '/actions', label: 'Actions', ready: true },
+// Primary work and admin pages; an item shows only if the user's role allows it.
+const NAV: { to: string; label: string; permission?: string; adminOnly?: boolean }[] = [
+  { to: '/watch', label: 'Watch' },
+  { to: '/overview', label: 'Overview' },
+  { to: '/process', label: 'Process' },
+  { to: '/knowledge', label: 'Knowledge' },
+  { to: '/investigate', label: 'Investigate' },
+  { to: '/actions', label: 'Actions' },
+  { to: '/models', label: 'Models' },
+  { to: '/observability', label: 'Observability', permission: 'view_observability' },
+  { to: '/users', label: 'Users', adminOnly: true },
 ]
 
 function OpenAlerts() {
@@ -33,49 +40,48 @@ function OpenAlerts() {
 
 export default function Layout() {
   const { search } = useLocation()
+  const { me, can } = useAuth()
+  const realAdmin = (me?.real_user ?? me?.user)?.platform_role === 'admin'
+  const items = NAV.filter((n) => (n.adminOnly ? realAdmin : !n.permission || can(n.permission)))
   return (
     <div className="min-h-screen">
       <header className="border-b border-hairline bg-surface">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-3">
-          <div className="flex items-center gap-8">
-            <div>
-              <div className="text-base font-semibold">Intelligence WatchDog</div>
-              <div className="text-[11px] text-ink-muted">Watch · Investigate · Recommend · Act</div>
+        <div className="mx-auto flex max-w-7xl flex-wrap items-end justify-between gap-x-6 gap-y-2 px-4 pt-3">
+          <div className="flex flex-wrap items-end gap-6">
+            <div className="pb-1">
+              <div className="whitespace-nowrap text-base font-semibold">Intelligence WatchDog</div>
+              <div className="whitespace-nowrap text-[11px] text-ink-muted">Watch · Investigate · Recommend · Act</div>
             </div>
-            <nav aria-label="Main" className="flex gap-1">
-              {NAV.map((n) =>
-                n.ready ? (
-                  <NavLink
-                    key={n.to}
-                    to={{ pathname: n.to, search }}
-                    className={({ isActive }) =>
-                      `rounded-md px-3 py-1.5 text-sm ${
-                        isActive ? 'bg-ghost font-semibold text-ink' : 'text-ink-2 hover:bg-ghost'
-                      }`
-                    }
-                  >
-                    {n.label}
-                    {n.to === '/watch' && <OpenAlerts />}
-                  </NavLink>
-                ) : (
-                  <span
-                    key={n.to}
-                    className="cursor-not-allowed rounded-md px-3 py-1.5 text-sm text-ink-muted"
-                    title={`Coming in ${n.milestone}`}
-                    aria-disabled
-                  >
-                    {n.label}
-                  </span>
-                ),
-              )}
-            </nav>
+            <DomainSwitcher />
           </div>
-          <div className="flex items-center gap-4">
-            <ActingAs />
+          <div className="flex flex-wrap items-center gap-4 pb-1">
             <SystemStatus />
+            <UserMenu />
           </div>
         </div>
+        <nav aria-label="Main" className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 pt-2">
+          {items.map((n) => (
+            <NavLink
+              key={n.to}
+              to={{ pathname: n.to, search }}
+              className={({ isActive }) =>
+                `whitespace-nowrap border-b-2 px-3 py-2 text-sm ${
+                  isActive ? 'border-series-1 font-semibold text-ink' : 'border-transparent text-ink-2 hover:text-ink'
+                }`
+              }
+            >
+              {n.label}
+              {n.to === '/watch' && <OpenAlerts />}
+            </NavLink>
+          ))}
+        </nav>
       </header>
+      {me?.real_user && (
+        <div className="border-b border-hairline bg-warning/15 px-4 py-1.5 text-center text-xs text-ink">
+          You ({me.real_user.name}) are acting as <b>{me.user.name}</b>
+          {me.business_role ? ` · ${me.business_role}` : ''}. Every action is recorded as theirs, with you named in the audit log.
+        </div>
+      )}
       <FilterBar />
       <main className="mx-auto max-w-7xl px-4 pb-16 pt-6">
         <Outlet />
@@ -84,25 +90,82 @@ export default function Layout() {
   )
 }
 
-function ActingAs() {
-  const { user, users, setUserId } = useActingUser()
-  if (!users.length) return null
+function DomainSwitcher() {
+  const { domain, setDomain } = useActiveDomain()
+  const navigate = useNavigate()
+  const q = useQuery({ queryKey: ['domains-list'], queryFn: listDomains, staleTime: 60_000 })
+  if (!q.data || q.data.length < 2) return null
   return (
-    <label className="flex items-center gap-1.5 text-xs text-ink-2" title="Demo identities until login is added (M8). Identity is self-asserted; the role rules are enforced by the backend.">
-      Acting as
+    <label className="flex flex-col gap-0.5" title="Each process is a domain pack: configuration and data on the same engine.">
+      <span className="text-[11px] text-ink-muted">Process</span>
       <select
-        value={user?.id ?? ''}
-        onChange={(e) => setUserId(e.target.value)}
-        className="rounded-md border border-hairline bg-surface px-1.5 py-0.5 text-xs font-medium text-ink"
+        value={domain ?? ''}
+        onChange={(e) => {
+          navigate('/watch') // filters belong to one pack: start the new one unfiltered
+          setDomain(e.target.value)
+        }}
+        className="rounded-md border border-hairline bg-surface px-2 py-1 text-sm font-medium text-ink"
       >
-        {users.map((u) => (
-          <option key={u.id} value={u.id}>
-            {u.name} · {u.role}
+        {q.data.map((d) => (
+          <option key={d.domain} value={d.domain}>
+            {d.display_name}
           </option>
         ))}
       </select>
-      <span className="rounded border border-hairline px-1 text-[10px] uppercase tracking-wide text-ink-muted">demo</span>
     </label>
+  )
+}
+
+/** Who is signed in, their roles here, sign out; admins can act as another user (audited). */
+function UserMenu() {
+  const { me } = useAuth()
+  const qc = useQueryClient()
+  const realAdmin = (me?.real_user ?? me?.user)?.platform_role === 'admin'
+  const users = useQuery({ queryKey: ['auth-users'], queryFn: authApi.users, enabled: realAdmin, staleTime: 60_000 })
+  if (!me) return null
+  const switchTo = async (id: string) => {
+    await authApi.actAs(id === (me.real_user ?? me.user).user_id ? null : id)
+    qc.clear()
+    await qc.invalidateQueries()
+  }
+  const logout = async () => {
+    await authApi.logout()
+    qc.clear()
+    window.location.assign('/')
+  }
+  return (
+    <div className="flex items-center gap-3 text-xs text-ink-2">
+      {realAdmin && users.data ? (
+        <label className="flex items-center gap-1.5" title="Admins can act as another user for demos and support. Recorded in the audit log.">
+          Act as
+          <select
+            value={me.user.user_id}
+            onChange={(e) => switchTo(e.target.value)}
+            className="max-w-[16rem] rounded-md border border-hairline bg-surface px-1.5 py-0.5 text-xs font-medium text-ink"
+          >
+            {users.data
+              .filter((u) => u.active)
+              .map((u) => (
+                <option key={u.user_id} value={u.user_id}>
+                  {u.name} · {u.platform_role}
+                  {Object.keys(u.pack_roles).length ? ` · ${Object.values(u.pack_roles).join(' / ')}` : ''}
+                </option>
+              ))}
+          </select>
+        </label>
+      ) : (
+        <span>
+          <b className="text-ink">{me.user.name}</b>
+        </span>
+      )}
+      <span className="rounded border border-hairline px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink-muted" title={`Business role here: ${me.business_role ?? 'none'}`}>
+        {me.user.platform_role}
+        {me.business_role ? ` · ${me.business_role}` : ''}
+      </span>
+      <button onClick={logout} className="underline underline-offset-2 hover:text-ink">
+        Sign out
+      </button>
+    </div>
   )
 }
 
@@ -163,7 +226,7 @@ function FilterBar() {
           </button>
         )}
         <div className="ml-auto pb-1.5 text-xs text-ink-muted">
-          {d.display_name} · {formatCount(d.cases)} {d.case_label}s · SLA {d.sla_hours / 24} days
+          {formatCount(d.cases)} {d.case_label_plural} · {d.sla_name} SLA {d.sla_hours / 24} days
         </div>
       </div>
     </div>

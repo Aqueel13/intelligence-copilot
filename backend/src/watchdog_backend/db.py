@@ -9,7 +9,16 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from watchdog_backend.config import get_settings
 
 # Postgres schemas, grouped by bounded context (see docs/PROJECT_BRIEF.md).
-SCHEMAS = ("core", "operational", "knowledge", "intelligence", "operations", "governance")
+SCHEMAS = (
+    "core",
+    "operational",
+    "knowledge",
+    "intelligence",
+    "operations",
+    "governance",
+    "observability",
+    "identity",
+)
 
 
 class Base(DeclarativeBase):

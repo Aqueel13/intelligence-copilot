@@ -1,7 +1,7 @@
 # Intelligence WatchDog — Project Brief
 
 > Working document. Records the decisions made so far and the agreed scope.
-> Last updated: 2026-11-10.
+> Last updated: 2026-11-10 (M8: second domain pack).
 
 ## 1. One-liner
 
@@ -61,6 +61,15 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 | D36 | **JSON-schema structured output by default, wall-clock LLM deadlines** | Found by the evaluation: tool calling failed on two Groq models (JSON schema 3/3), and a slowly streaming server could stall a run for minutes. |
 | D37 | **Symmetric safeguards without re-judging the model's words** | Downgrades stop decoys; upgrades stop over-caution. Upgrades act only on code-worded hypotheses (coverage hypotheses, or a new "Evidence-confirmed" finding) whose evidence meets strict criteria, because flipping a verdict on a sentence the model wrote can assert something false. |
 | D38 | **Parallel hypothesis assessment** | Hypotheses are independent; judged concurrently (`LLM_PARALLEL_CALLS`). Small gain on a single local GPU (Ollama serialises), real gain on cloud providers. |
+| D39 | **Packs side by side, chosen per request** | Both packs share one database (every row carries `domain`). The active pack is a context variable set from the `X-Domain` header, per watcher job and per CLI run; threads copy it. A UI switcher shows the same engine on two processes, which a one-pack-per-deployment setup would hide. |
+| D40 | **Everything the investigation assumes about a process lives in `pack.yaml`** | Scanned dimensions, confounder controls, loop outcomes, wait targets, prompt wording, Overview tiles and example questions were constants in code; moving them out was most of the work of the second pack. Planted-truth scoring moved to each pack's benchmark file. |
+| D41 | **Second pack: Procure-to-Pay, invoice-to-pay** | Closest to the author's procurement-transformation background. Planted causes exercise different checks from insurance: a plant-specific queue (goods receipts), a PO-type loop (price exceptions), a team loop (capture errors), and a change over time (payment runs cut to weekly). Decoys are confounded by a *different* control each (PO type, AP team). |
+| D42 | **Month-by-month queue check** | A queue every case passes through has no "without" group, so the existing bottleneck evidence could not confirm P2P's weekly payment run. The activity check now reports monthly waits and their correlation with the breach rate; the scan and the strict evidence rule accept a material queue whose wait rose 30%+ and moved with breaches (r ≥ 0.8, p < 0.05). Generic: it applies to every pack. |
+| D43 | **Local accounts now, GitHub sign-in later** | Sign-in with scrypt-hashed passwords and a database session in an HttpOnly, SameSite=Lax cookie (the token is stored hashed). GitHub OAuth will attach to the same `identity.users` table at deployment. |
+| D44 | **Two-layer access: platform role + business role per pack** | Platform roles (viewer, analyst, admin) gate capabilities (investigate, propose, approve, execute, simulate, manage users), enforced per route. Approval still needs the business role the pack's governance names, so an admin cannot approve an action unless their role in that pack allows it. Admins may act as another user for demos: the effective user is the governance actor (separation of duties still holds) and the real admin is recorded in `via` and the audit log. |
+| D45 | **Built-in observability** | Every LLM call (role, model, tier, tokens, latency, status, investigation, user) and API request is written to Postgres by a background writer, never on the request path, kept 30 days. An Observability page shows percentiles, errors, cache hits, the Groq free-tier quota per model and per-investigation traces. It found two bugs on its first day (parallel assessment lost its context; cache hits were never recorded). |
+| D46 | **Answer cache: exact or near-identical, same numbers, same corpus** | Reuse an answer when the normalised question matches, or embedding similarity ≥ 0.97 AND the questions mention the same numbers (₹3 lakh and ₹30 lakh embed almost identically). Keyed by a hash of the pack's document versions and the retrieval settings, so any document change invalidates it. Evaluation bypasses the cache. |
+| D47 | **A light model tier for simple requests** | Question routing and short single-document policy lookups go to `LLM_LIGHT_MODEL` when set; reasoning, comparison and multi-document questions stay on the standard model. The rule is explainable and its reason is shown and recorded. On one small local GPU a second local model mostly adds swap time; the tier pays off on quota-limited cloud models. |
 
 ## 4. Product shape
 
@@ -147,6 +156,29 @@ Computed by exact counterfactual: each claim is re-simulated with one cause swit
 
 Calibration ranges are enforced by tests, so a generator change that weakens the story fails CI.
 
+## 5b. Second scenario: Procure-to-Pay (invoice-to-pay)
+
+> "Why are invoices missing the ten-day payment target? Find the root causes and recommend corrective actions."
+
+Varaha Auto Components (fictional), five plants, 6,000 supplier invoices over six months. One
+case is one invoice, from receipt to payment release; the target is 10 calendar days (early-
+payment discounts; well inside the MSMED Act limits for small suppliers).
+
+| ID | Root cause | How it shows in the data | Corroborating document |
+|----|-----------|--------------------------|------------------------|
+| RC1 | Chakan's stores post goods receipts late (one GRN clerk short since March) | More invoices reach matching before their GRN, and wait ~5–6 days for it | WH-201 (GRN within 1 working day; Chakan staffing) |
+| RC2 | Free-text POs have no agreed price | Price exceptions on ~55% of free-text invoices vs ~5% otherwise | PRC-101 (free-text rules), AP-103 (tolerance) |
+| RC3 | The BPO Partner's capture errors | Re-capture loop on ~40% of BPO-captured invoices vs ~4% in-house | AP-102 (97% first-time-right; BPO quality plan) |
+| RC4 | Treasury suspended the Tuesday payment run from 1 July | Wait before `Payment Run` rises from ~54h to ~78h; breach rate steps up in July | TRS-401 (twice-weekly calendar; change log) |
+
+| ID | Looks like | Actually |
+|----|-----------|----------|
+| DC1 | "IT and professional services invoices are slow" | They are mostly free-text POs (RC2); within the same PO type they are not slower. |
+| DC2 | "MSME suppliers are paid late" | Their paper invoices mostly go to the BPO Partner (RC3); within the same AP team they are not slower. |
+
+Calibrated ground truth (seed 42): breach rate 30.7% (8.3% without any planted cause); share of
+breaches attributable to RC1 12%, RC2 23%, RC3 20%, RC4 18%. Stable across seeds 7 and 1234.
+
 ## 6. Architecture (prototype)
 
 ```
@@ -203,8 +235,7 @@ PostgreSQL 17 + pgvector    Operations MCP server (separate process) → mock en
 **Later**
 - Procure-to-Pay pack (proves the engine is horizontal)
 - Analytics and Knowledge MCP servers, so external MCP clients can use them
-- Agent observability screen
-- Public deployment, auth, rate limiting
+- Public deployment, GitHub sign-in, rate limiting
 - Exploratory free-form SQL (read-only, sandboxed)
 
 **Out (for now)**
@@ -263,7 +294,7 @@ Closed loop on the dev data: delegation and Team B retraining were executed in M
 
 ### M7 results (2026-11-10): see `docs/evaluation_report.md`
 
-54 investigations (4 models × 3 seeds × 3 questions; 5 refused by Groq's free daily quota), 132 policy answers, retrieval and what-if suites.
+36 scored investigations (4 models × 3 seeds × 3 questions; 5 refused by Groq's free daily quota; 12 earlier runs repeated after fixes), 132 policy answers, retrieval and what-if suites.
 
 | Model | Investigations completed | Mean recall | Decoys accepted | Model's own citation accuracy |
 |---|---|---|---|---|
@@ -273,6 +304,18 @@ Closed loop on the dev data: delegation and Team B retraining were executed in M
 | `groq:openai/gpt-oss-120b` | 6/9 | 79% | 0 | 73% |
 
 No model accepted a decoy in any run. Every miss was over-caution (a supported cause left inconclusive or wrongly refuted); D37 now addresses it with code-worded upgrades. Unverified numbers in summaries: 0 across all completed runs. Pending: re-run the cloud models' broker question (predates a what-if fix) and the five quota-refused runs.
+
+### M8 results so far (2026-11-10): second domain pack
+
+Procure-to-Pay on the same engine, local `qwen2.5:7b`, seeds 42, 7, 1234:
+
+| Investigations | Mean recall | Decoys accepted | Remedy recommended | Q&A grounded | Retrieval hit@5 |
+|---|---|---|---|---|---|
+| 9/9 completed | 100% (every cause in every run) | 0 / 9 runs | 17/18 causes | 100% (model's own citations 86%) | 100% (all methods) |
+
+The 7B model called a confounded segment "supported" 25 times; the confounder rule refuted all
+of them. Insurance results unchanged (all 165 earlier tests pass; 26 new P2P tests). Remaining
+M8: public deployment (hosting, GitHub OAuth, cached showcase runs) and the video.
 
 ## 10. Open questions
 
