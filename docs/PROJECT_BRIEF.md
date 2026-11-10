@@ -49,6 +49,10 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 | D24 | **Coverage rule** | Any strong, significant signal that no planned hypothesis tests gets its own hypothesis (marked "coverage"), so planner variance cannot silently drop a root cause. If planning fails, hypotheses are built from signals alone. |
 | D25 | **Action catalogue + what-if engine** | Corrective actions live in the domain pack with the policy clause that permits them and a lever. A deterministic what-if on the event log values each one (breaches avoided, illustrative ROI). Validated against the generator's exact counterfactuals; the Saturday rota lever was corrected after it overstated impact 4×. |
 | D26 | **Every number in the summary is verified** | Numbers in the executive summary must match the computed facts (±1%); otherwise the model rewrites once, and anything still unverified is flagged in the UI. |
+| D27 | **One governance service, two doors** | Proposal, approval and execution rules live in `governance/service.py`; the API and the Operations MCP server both call it. The backend executes through the MCP server like any other client, and the server re-checks before anything changes. |
+| D28 | **Agents cannot approve** | The Operations MCP server has no approve tool, and the service refuses decisions from non-users. Approvers need a role named in `governance.yaml` (taken from the policies, e.g. POL-002 §4.3 → Head of Claims), and the proposer may not approve (separation of duties). |
+| D29 | **Tamper-evident audit log** | Every attempt, including every refusal, is appended with a SHA-256 hash chain; refusals are committed even when the request fails. Editing, inserting or deleting an entry is detected by `/api/audit/verify`. |
+| D30 | **MCP SDK v2, static bearer tokens** | Each MCP client has its own token (identity in the audit log). Published on localhost only. Refusals are raised as `ToolError` so clients see *why*; unexpected errors stay opaque. Demo user identities are self-asserted until M8 adds login. |
 
 ## 4. Product shape
 

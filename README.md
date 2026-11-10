@@ -4,7 +4,7 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 
 **Watch → Investigate → Recommend → Act**
 
-> Status: **M4 — investigation agent.** See [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md) for scope, decisions and milestones.
+> Status: **M5 — governed actions over MCP.** See [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md) for scope, decisions and milestones.
 
 ## Design principles
 
@@ -23,13 +23,14 @@ Requirements: Docker with Compose, [uv](https://docs.astral.sh/uv/), Node 24+.
 
 ```bash
 cp .env.example .env          # then set POSTGRES_PASSWORD (and the same value in DATABASE_URL)
+make secrets                  # generate MCP tokens and the mock system's API key
 make up                       # build and start postgres, migrations, backend, frontend
 make seed                     # generate 5,000 synthetic claims and ingest the policy documents
 ```
 
 | What | URL |
 |------|-----|
-| App: Overview, Process, Knowledge and Investigate screens | http://localhost:5173 |
+| App: Overview, Process, Knowledge, Investigate and Actions screens | http://localhost:5173 |
 | API docs | http://localhost:8000/api/docs |
 | Health | http://localhost:8000/api/health |
 | Metric catalogue | http://localhost:8000/api/metrics |
@@ -37,6 +38,19 @@ make seed                     # generate 5,000 synthetic claims and ingest the p
 Other commands: `make test`, `make lint`, `make check` (everything CI runs), `make eval-retrieval`, `make psql`, `make logs`, `make down`.
 
 The LLM defaults to a local model through [Ollama](https://ollama.com) (`ollama pull qwen2.5:7b`). Set `LLM_DEFAULT_MODEL` / `LLM_MODELS` in `.env` to use Groq or Gemini instead.
+
+## Connect an MCP client to the Operations server
+
+The Operations MCP server (`http://localhost:8103/mcp`, localhost only) lets any MCP client list
+the action catalogue, propose actions and execute actions a person has approved. It has no
+approve tool. Use the `OPERATIONS_MCP_EXTERNAL_TOKEN` from `.env`, for example with Claude Code:
+
+```bash
+claude mcp add --transport http watchdog-ops http://localhost:8103/mcp \
+  --header "Authorization: Bearer $(grep ^OPERATIONS_MCP_EXTERNAL_TOKEN= .env | cut -d= -f2-)"
+```
+
+Every call is recorded in the hash-chained audit log under the client's name.
 
 ## Repository layout
 
@@ -49,6 +63,9 @@ backend/       FastAPI app (src/watchdog_backend), Alembic migrations, tests
   llm/         provider-agnostic LLM gateway (Ollama, Groq, Gemini)
   investigation/  LangGraph investigation: scan → plan → evidence → assess → recommend → summary,
                   with confounder overrides, what-if valuation and number verification
+  governance/  action rules (roles, separation of duties, approve-before-execute), audit chain
+  mcp_servers/ Operations MCP server (governed actions for any MCP client)
+  enterprise_mock/  stand-in for the client's claims administration system
 domain_packs/  per-industry configuration (process, dimensions, rules, metrics,
                action catalogue), policy documents and evaluation sets
 frontend/      React + Vite + Tailwind UI

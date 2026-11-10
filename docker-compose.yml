@@ -32,6 +32,11 @@ services:
       LLM_MODELS: ${LLM_MODELS:-{}}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPERATIONS_MCP_URL: http://operations-mcp:8103/mcp
+      OPERATIONS_MCP_BACKEND_TOKEN: ${OPERATIONS_MCP_BACKEND_TOKEN:?run make secrets}
+      OPERATIONS_MCP_TOKENS: '{"${OPERATIONS_MCP_BACKEND_TOKEN}": "watchdog-backend", "${OPERATIONS_MCP_EXTERNAL_TOKEN:?run make secrets}": "external-agent"}'
+      ENTERPRISE_API_URL: http://enterprise-mock:8201
+      ENTERPRISE_API_KEY: ${ENTERPRISE_API_KEY:?run make secrets}
     depends_on:
       postgres:
         condition: service_healthy
@@ -59,6 +64,34 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+    restart: unless-stopped
+
+  # Operations MCP server: governed actions for the backend AND external MCP clients.
+  # Published on localhost only, so MCP clients on this machine (e.g. Claude) can connect.
+  operations-mcp:
+    build: ./backend
+    command: ["uvicorn", "watchdog_backend.mcp_servers.operations:app", "--host", "0.0.0.0", "--port", "8103"]
+    environment: *backend-env
+    volumes:
+      - ./backend/src:/app/src
+      - ./domain_packs:/domain_packs:ro
+    ports:
+      - "127.0.0.1:8103:8103"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # Stand-in for the client's claims administration system (internal only).
+  enterprise-mock:
+    build: ./backend
+    command: ["uvicorn", "watchdog_backend.enterprise_mock.app:app", "--host", "0.0.0.0", "--port", "8201"]
+    environment: *backend-env
+    volumes:
+      - ./backend/src:/app/src
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   # Lets containers reach Ollama on the host WITHOUT exposing Ollama to the network:

@@ -191,3 +191,82 @@ export const investigationsApi = {
     return res.json() as Promise<InvestigationRecord>
   },
 }
+
+// ------------------------------------------------------------------ actions & governance
+
+export interface DemoUser {
+  id: string
+  name: string
+  role: string
+}
+
+export type ActionStatus = 'proposed' | 'approved' | 'rejected' | 'executing' | 'executed' | 'failed'
+
+export interface ActionRequest {
+  request_id: string
+  action_id: string
+  title: string
+  operation: { type: string; params: Record<string, unknown> }
+  impact: (ActionImpact & { scope?: Scope }) | null
+  policy_refs: string[]
+  approver_roles: string[]
+  approval_basis: string | null
+  investigation_id: string | null
+  rationale: string | null
+  status: ActionStatus
+  requested_by: string
+  requested_via: string
+  created_at: string
+  decision: string | null
+  decided_by: string | null
+  decided_role: string | null
+  decision_note: string | null
+  decided_at: string | null
+  executed_by: string | null
+  executed_at: string | null
+  result: Record<string, unknown> | null
+  error: string | null
+}
+
+export interface AuditEntry {
+  entry_id: number
+  at: string
+  actor: string
+  actor_type: 'user' | 'agent' | 'mcp_client' | 'system'
+  event: string
+  request_id: string | null
+  details: Record<string, unknown>
+  prev_hash: string
+  hash: string
+}
+
+export interface AuditVerification {
+  ok: boolean
+  entries: number
+  first_broken_entry: number | null
+  reason: string | null
+}
+
+async function json<T>(res: Response): Promise<T> {
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { detail?: unknown }
+    throw new Error(typeof body.detail === 'string' ? body.detail : `${res.status} ${res.statusText}`)
+  }
+  return res.json() as Promise<T>
+}
+
+const send = (url: string, body: unknown) =>
+  fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+
+export const actionsApi = {
+  users: () => fetch('/api/governance/users').then((r) => json<DemoUser[]>(r)),
+  list: () => fetch('/api/actions').then((r) => json<ActionRequest[]>(r)),
+  get: (id: string) => fetch(`/api/actions/${id}`).then((r) => json<ActionRequest & { audit: AuditEntry[] }>(r)),
+  propose: (b: { action_id: string; user_id: string; rationale?: string; investigation_id?: string | null }) =>
+    send('/api/actions', b).then((r) => json<ActionRequest>(r)),
+  decide: (id: string, b: { user_id: string; decision: 'approved' | 'rejected'; note?: string }) =>
+    send(`/api/actions/${id}/decision`, b).then((r) => json<ActionRequest>(r)),
+  execute: (id: string, user_id: string) => send(`/api/actions/${id}/execute`, { user_id }).then((r) => json<ActionRequest>(r)),
+  audit: () => fetch('/api/audit').then((r) => json<AuditEntry[]>(r)),
+  verify: () => fetch('/api/audit/verify').then((r) => json<AuditVerification>(r)),
+}

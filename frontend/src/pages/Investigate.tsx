@@ -1,8 +1,9 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRef, useState, type FormEvent } from 'react'
-import { useSearchParams } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import type { Scope } from '../api/client'
 import {
+  actionsApi,
   investigationsApi,
   streamInvestigation,
   type Hypothesis,
@@ -13,6 +14,7 @@ import {
 import { Inline, MarkdownLite } from '../components/MarkdownLite'
 import { Card, ErrorNote, LowSample, StatTile, StatusBadge } from '../components/ui'
 import { formatCount, formatDays, formatDimensionValue, formatPercent, formatValue } from '../lib/format'
+import { useActingUser } from '../lib/actingUser'
 import { useDomainScope } from '../lib/hooks'
 
 const EXAMPLES = [
@@ -400,6 +402,43 @@ function Recommendations({ recs, hypotheses }: { recs: Recommendation[]; hypothe
   )
 }
 
+function ProposeButton({ r }: { r: Recommendation }) {
+  const { user } = useActingUser()
+  const [params] = useSearchParams()
+  const qc = useQueryClient()
+  const propose = useMutation({
+    mutationFn: () =>
+      actionsApi.propose({
+        action_id: r.action_id,
+        user_id: user!.id,
+        rationale: r.rationale || undefined,
+        investigation_id: params.get('id'),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['actions'] }),
+  })
+  if (propose.data)
+    return (
+      <span className="text-xs text-ink-2">
+        <StatusBadge status="good" label="Proposed" />{' '}
+        <Link to="/actions" className="underline underline-offset-2">
+          Open in Action Centre
+        </Link>
+      </span>
+    )
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      <button
+        onClick={() => propose.mutate()}
+        disabled={!user || propose.isPending}
+        className="rounded-md border border-hairline px-2.5 py-1 text-xs font-semibold text-ink hover:bg-ghost disabled:opacity-40"
+      >
+        {propose.isPending ? 'Proposing…' : 'Propose for approval'}
+      </button>
+      {propose.error && <span className="text-xs text-critical">{(propose.error as Error).message}</span>}
+    </span>
+  )
+}
+
 function RecCard({ r, hypotheses }: { r: Recommendation; hypotheses: Hypothesis[] }) {
   const i = r.impact
   return (
@@ -412,6 +451,7 @@ function RecCard({ r, hypotheses }: { r: Recommendation; hypotheses: Hypothesis[
         <div className="flex items-center gap-2">
           {!r.cost_effective && <StatusBadge status="serious" label="Not cost-effective" />}
           <span className="rounded border border-hairline px-1.5 py-0.5 text-[11px] text-ink-2">{r.effort} effort</span>
+          <ProposeButton r={r} />
         </div>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">

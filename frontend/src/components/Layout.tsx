@@ -2,15 +2,16 @@ import { useQuery } from '@tanstack/react-query'
 import { NavLink, Outlet, useLocation } from 'react-router'
 import { api } from '../api/client'
 import { formatCount, formatDimensionValue, formatMonth } from '../lib/format'
+import { useActingUser } from '../lib/actingUser'
 import { useDomainScope } from '../lib/hooks'
 import { monthsBetween } from '../lib/scope'
 
-const NAV = [
+const NAV: { to: string; label: string; ready: boolean; milestone?: string }[] = [
   { to: '/overview', label: 'Overview', ready: true },
   { to: '/process', label: 'Process', ready: true },
   { to: '/knowledge', label: 'Knowledge', ready: true },
   { to: '/investigate', label: 'Investigate', ready: true },
-  { to: '/actions', label: 'Actions', ready: false, milestone: 'M5' },
+  { to: '/actions', label: 'Actions', ready: true },
 ]
 
 export default function Layout() {
@@ -51,7 +52,10 @@ export default function Layout() {
               )}
             </nav>
           </div>
-          <SystemStatus />
+          <div className="flex items-center gap-4">
+            <ActingAs />
+            <SystemStatus />
+          </div>
         </div>
       </header>
       <FilterBar />
@@ -59,6 +63,28 @@ export default function Layout() {
         <Outlet />
       </main>
     </div>
+  )
+}
+
+function ActingAs() {
+  const { user, users, setUserId } = useActingUser()
+  if (!users.length) return null
+  return (
+    <label className="flex items-center gap-1.5 text-xs text-ink-2" title="Demo identities until login is added (M8). Identity is self-asserted; the role rules are enforced by the backend.">
+      Acting as
+      <select
+        value={user?.id ?? ''}
+        onChange={(e) => setUserId(e.target.value)}
+        className="rounded-md border border-hairline bg-surface px-1.5 py-0.5 text-xs font-medium text-ink"
+      >
+        {users.map((u) => (
+          <option key={u.id} value={u.id}>
+            {u.name} · {u.role}
+          </option>
+        ))}
+      </select>
+      <span className="rounded border border-hairline px-1 text-[10px] uppercase tracking-wide text-ink-muted">demo</span>
+    </label>
   )
 }
 

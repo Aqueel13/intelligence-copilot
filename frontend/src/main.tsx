@@ -3,6 +3,7 @@ import { lazy, StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router'
 import Layout from './components/Layout'
+import { ActingUserProvider } from './lib/actingUser'
 import './index.css'
 
 // Screens load on demand: the process map's graph libraries stay off the Overview.
@@ -10,6 +11,7 @@ const Overview = lazy(() => import('./pages/Overview'))
 const Process = lazy(() => import('./pages/Process'))
 const Knowledge = lazy(() => import('./pages/Knowledge'))
 const Investigate = lazy(() => import('./pages/Investigate'))
+const Actions = lazy(() => import('./pages/Actions'))
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, refetchOnWindowFocus: false, retry: 1 } },
@@ -24,6 +26,7 @@ const router = createBrowserRouter([
       { path: 'process', element: <Suspense><Process /></Suspense> },
       { path: 'knowledge', element: <Suspense><Knowledge /></Suspense> },
       { path: 'investigate', element: <Suspense><Investigate /></Suspense> },
+      { path: 'actions', element: <Suspense><Actions /></Suspense> },
       { path: '*', element: <Navigate to="/overview" replace /> },
     ],
   },
@@ -32,7 +35,9 @@ const router = createBrowserRouter([
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <ActingUserProvider>
+        <RouterProvider router={router} />
+      </ActingUserProvider>
     </QueryClientProvider>
   </StrictMode>,
 )

@@ -1,0 +1,34 @@
+# Governance: who may do what with actions in this domain.
+#
+# Until login exists (M8: GitHub OAuth) these are DEMO identities chosen in the UI, so
+# identity is self-asserted. The rules themselves (roles, separation of duties, approval
+# before execution) are enforced in the backend and the Operations MCP server.
+
+users:
+  - { id: a.rao,   name: A. Rao,   role: Head of Claims }
+  - { id: r.menon, name: R. Menon, role: Chief Operating Officer }
+  - { id: s.iyer,  name: S. Iyer,  role: Claims Operations Manager }
+  - { id: p.nair,  name: P. Nair,  role: Quality Assurance Lead }
+  - { id: m.khan,  name: M. Khan,  role: Operations Analyst }
+
+# Who may approve each catalogue action, with the clause that says so.
+approvals:
+  delegate_mid_value_approvals:
+    roles: [Head of Claims]
+    basis: "POL-002 §4.3: delegation requires written approval by the Head of Claims"
+  add_senior_adjuster_capacity:
+    roles: [Head of Claims, Chief Operating Officer]
+    basis: "Headcount changes need Head of Claims or COO approval"
+  enforce_broker_checklist:
+    roles: [Claims Operations Manager, Head of Claims]
+    basis: "SOP-102 §3.3: broker quality plans are owned by Claims Operations"
+  retrain_team_b:
+    roles: [Quality Assurance Lead, Claims Operations Manager]
+    basis: "SOP-105 §5.1: retraining is owned by Quality Assurance"
+  saturday_rota:
+    roles: [Chief Operating Officer]
+    basis: "POL-003 §3.1: the Saturday rota needs approval of the Chief Operating Officer"
+
+rules:
+  # Separation of duties: the person who proposed an action may not approve it.
+  separation_of_duties: true

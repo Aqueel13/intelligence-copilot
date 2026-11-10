@@ -40,6 +40,15 @@ class Settings(BaseSettings):
     groq_api_key: str | None = None
     gemini_api_key: str | None = None
 
+    # Actions: Operations MCP server and the (mock) enterprise system it changes.
+    operations_mcp_url: str = "http://localhost:8103/mcp"
+    # Bearer tokens accepted by the Operations MCP server, as {"token": "client name"}.
+    operations_mcp_tokens: dict[str, str] = {}
+    # The token the backend itself uses when it calls the Operations MCP server.
+    operations_mcp_backend_token: str = ""
+    enterprise_api_url: str = "http://localhost:8201"
+    enterprise_api_key: str = ""
+
     # Comma-separated list of allowed browser origins.
     cors_origins: str = "http://localhost:5173"
 
