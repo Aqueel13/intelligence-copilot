@@ -44,6 +44,11 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 | D19 | **Default retrieval = hybrid (vector + full-text, RRF), no reranking** | Measured on the 28-question benchmark: hybrid reaches Hit@3 = Hit@5 = 1.00; reranking adds ~300 ms per query and no measurable gain on this corpus. Reranking stays available and benchmarked. |
 | D20 | **Citations are verified, not trusted** | The cross-encoder scores every answer sentence against every retrieved source. Unsupported citations are corrected to the best source (only if it scores ≥ 3.0) or flagged. Both the model's own citation accuracy and the final grounding are recorded. qwen2.5:7b often cites the wrong source number for correct statements. |
 | D21 | **Containers reach host Ollama through a relay** | A socat container on the host network listens only on the Docker bridge (172.17.0.1) and forwards to Ollama on localhost. Ollama is never exposed to the LAN (the laptop has no firewall). |
+| D22 | **Investigations: code computes, the LLM reasons** | A deterministic scan (significance tests, bottlenecks, weekday effects, trend) runs before any LLM call. The planner picks checks from a typed menu; code runs them and writes the evidence text the model reads. Outputs use flat schemas so a local 7B model fills them reliably. |
+| D23 | **Rule overrides on verdicts** | Segment effects are automatically re-tested within amount band, line of business and channel. If the effect disappears, a "supported" verdict is overridden to "refuted" and the override is shown. Small, non-significant samples cannot be "supported". |
+| D24 | **Coverage rule** | Any strong, significant signal that no planned hypothesis tests gets its own hypothesis (marked "coverage"), so planner variance cannot silently drop a root cause. If planning fails, hypotheses are built from signals alone. |
+| D25 | **Action catalogue + what-if engine** | Corrective actions live in the domain pack with the policy clause that permits them and a lever. A deterministic what-if on the event log values each one (breaches avoided, illustrative ROI). Validated against the generator's exact counterfactuals; the Saturday rota lever was corrected after it overstated impact 4×. |
+| D26 | **Every number in the summary is verified** | Numbers in the executive summary must match the computed facts (±1%); otherwise the model rewrites once, and anything still unverified is flagged in the UI. |
 
 ## 4. Product shape
 
@@ -220,6 +225,17 @@ PostgreSQL 17 + pgvector    Operations MCP server (separate process) → mock en
 | Simple query latency | < 15 s |
 
 Report actual results with failures. Compare at least two LLM providers on quality, cost and latency.
+
+### M4 results (2026-11-10, seed 42, question: "Why are claims breaching the five-day SLA?")
+
+| | Groq `openai/gpt-oss-120b` | Local `qwen2.5:7b` (RTX 4050) |
+|---|---|---|
+| Planted causes found | 4 / 4 | 4 / 4 (RC4 inside a combined broker hypothesis) |
+| Decoys accepted | 0 (DC1 caught by override) | 0 (DC1 caught by override; DC2 refuted) |
+| Summary numbers unverified | 0 / 41 | 0 / 15 |
+| Duration | ~80 s | ~60 s |
+
+Single runs, not yet a benchmark: M7 repeats these across seeds and models. Observations: the 7B model needed the coverage rule and the override more often; the 120B model is more conservative and initially called loop effects "inconclusive" until mechanism evidence (breach rate with vs without the loop) was added.
 
 ## 10. Open questions
 

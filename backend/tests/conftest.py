@@ -69,3 +69,14 @@ def db_engine(dataset):
     load_dataset(engine, dataset)
     yield engine
     engine.dispose()
+
+
+@pytest.fixture(scope="session")
+def kb(db_engine, pack):
+    """The domain pack's policy documents, ingested into the test database."""
+    from watchdog_backend.knowledge.ingest import ingest_directory
+    from watchdog_backend.knowledge.models import get_embedder
+    from watchdog_backend.knowledge.service import documents_dir
+
+    with db_engine.begin() as conn:
+        return ingest_directory(conn, pack.domain, documents_dir(), get_embedder())

@@ -83,6 +83,7 @@ def build_chat_model(spec: ModelSpec, temperature: float = 0.0) -> BaseChatModel
             model=spec.model,
             base_url=s.ollama_base_url,
             temperature=temperature,
+            num_ctx=8192,  # Ollama defaults to 4096, too small for investigation prompts
             client_kwargs={"timeout": s.llm_timeout_seconds},
         )
     if spec.provider == "groq":

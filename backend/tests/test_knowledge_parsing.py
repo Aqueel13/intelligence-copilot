@@ -42,8 +42,12 @@ A note under a subsection.
 def test_markdown_front_matter_becomes_metadata() -> None:
     doc = parse_document("pol.md", MD)
     assert (doc.doc_key, doc.title, doc.doc_type, doc.version, doc.status) == (
-        "POL-999", "Test Policy", "policy", "2.0", "current",
-    )  # fmt: skip
+        "POL-999",
+        "Test Policy",
+        "policy",
+        "2.0",
+        "current",
+    )
     assert str(doc.effective_date) == "2026-01-01"
     assert doc.metadata == {"reviewer": "Another"}  # unknown keys are kept, not dropped
     assert not doc.markdown.startswith("---")
@@ -113,8 +117,11 @@ def test_pdf_text_is_extracted() -> None:
 def test_sections_follow_headings_and_title_is_excluded() -> None:
     chunks = chunk_markdown(parse_document("p.md", MD).markdown)
     assert [c.section for c in chunks] == [
-        "Introduction", "1. Scope", "2. Levels", "2. Levels › 2.1 Notes",
-    ]  # fmt: skip
+        "Introduction",
+        "1. Scope",
+        "2. Levels",
+        "2. Levels › 2.1 Notes",
+    ]
     assert all("# Test Policy" not in c.content for c in chunks)
 
 

@@ -78,9 +78,16 @@ def ask(req: AskRequest, session: DbSession) -> Answer:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     try:
         return answer_question(
-            session.connection(), get_retriever(), model, spec.id, req.question,
-            get_reranker(), k=req.k, method=req.method, filters=req.filters,
-        )  # fmt: skip
+            session.connection(),
+            get_retriever(),
+            model,
+            spec.id,
+            req.question,
+            get_reranker(),
+            k=req.k,
+            method=req.method,
+            filters=req.filters,
+        )
     except LLMCallError as exc:
         # 502: the upstream model provider failed, not this service.
         raise HTTPException(
@@ -107,9 +114,14 @@ async def upload_document(
         doc = parse_document(
             file.filename or "upload",
             data,
-            {"id": doc_key, "title": title, "doc_type": doc_type, "version": version,
-             "status": status},
-        )  # fmt: skip
+            {
+                "id": doc_key,
+                "title": title,
+                "doc_type": doc_type,
+                "version": version,
+                "status": status,
+            },
+        )
     except UnsupportedDocument as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     result = ingest_document(session.connection(), get_pack().domain, doc, get_embedder())

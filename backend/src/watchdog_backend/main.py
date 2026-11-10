@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from watchdog_backend import __version__
-from watchdog_backend.api import domain, health, knowledge, metrics, process
+from watchdog_backend.api import domain, health, investigations, knowledge, metrics, process
 from watchdog_backend.config import get_settings
 
 
@@ -29,6 +29,7 @@ def create_app() -> FastAPI:
     app.include_router(metrics.router, prefix="/api")
     app.include_router(process.router, prefix="/api")
     app.include_router(knowledge.router, prefix="/api")
+    app.include_router(investigations.router, prefix="/api")
     return app
 
 

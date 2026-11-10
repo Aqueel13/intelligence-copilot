@@ -23,13 +23,6 @@ from watchdog_backend.knowledge.service import benchmark_path, documents_dir
 
 
 @pytest.fixture(scope="module")
-def kb(db_engine, pack):
-    with db_engine.begin() as conn:
-        results = ingest_directory(conn, pack.domain, documents_dir(), get_embedder())
-    return results
-
-
-@pytest.fixture(scope="module")
 def retriever(pack, kb) -> Retriever:
     return Retriever(pack.domain, get_embedder(), get_reranker())
 
@@ -130,9 +123,13 @@ def test_unsupported_sentence_is_flagged_not_corrected(conn, retriever) -> None:
 
 def _ask(conn, retriever, reply: str, question: str):
     return answer_question(
-        conn, retriever, FakeListChatModel(responses=[reply]), "fake:model", question,
+        conn,
+        retriever,
+        FakeListChatModel(responses=[reply]),
+        "fake:model",
+        question,
         get_reranker(),
-    )  # fmt: skip
+    )
 
 
 def test_answer_with_wrong_model_citations_is_repaired(conn, retriever) -> None:

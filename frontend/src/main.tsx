@@ -9,6 +9,7 @@ import './index.css'
 const Overview = lazy(() => import('./pages/Overview'))
 const Process = lazy(() => import('./pages/Process'))
 const Knowledge = lazy(() => import('./pages/Knowledge'))
+const Investigate = lazy(() => import('./pages/Investigate'))
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, refetchOnWindowFocus: false, retry: 1 } },
@@ -22,6 +23,7 @@ const router = createBrowserRouter([
       { path: 'overview', element: <Suspense><Overview /></Suspense> },
       { path: 'process', element: <Suspense><Process /></Suspense> },
       { path: 'knowledge', element: <Suspense><Knowledge /></Suspense> },
+      { path: 'investigate', element: <Suspense><Investigate /></Suspense> },
       { path: '*', element: <Navigate to="/overview" replace /> },
     ],
   },

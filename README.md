@@ -4,7 +4,7 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 
 **Watch → Investigate → Recommend → Act**
 
-> Status: **M3 — knowledge base with verified citations.** See [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md) for scope, decisions and milestones.
+> Status: **M4 — investigation agent.** See [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md) for scope, decisions and milestones.
 
 ## Design principles
 
@@ -29,7 +29,7 @@ make seed                     # generate 5,000 synthetic claims and ingest the p
 
 | What | URL |
 |------|-----|
-| App: Overview, Process and Knowledge screens | http://localhost:5173 |
+| App: Overview, Process, Knowledge and Investigate screens | http://localhost:5173 |
 | API docs | http://localhost:8000/api/docs |
 | Health | http://localhost:8000/api/health |
 | Metric catalogue | http://localhost:8000/api/metrics |
@@ -47,8 +47,10 @@ backend/       FastAPI app (src/watchdog_backend), Alembic migrations, tests
   generator/   synthetic data with planted root causes, decoys and ground truth
   knowledge/   document parsing, section-aware chunking, hybrid retrieval, cited answers
   llm/         provider-agnostic LLM gateway (Ollama, Groq, Gemini)
-domain_packs/  per-industry configuration (process, dimensions, rules, metrics),
-               policy documents and evaluation sets
+  investigation/  LangGraph investigation: scan → plan → evidence → assess → recommend → summary,
+                  with confounder overrides, what-if valuation and number verification
+domain_packs/  per-industry configuration (process, dimensions, rules, metrics,
+               action catalogue), policy documents and evaluation sets
 frontend/      React + Vite + Tailwind UI
 docs/          Project brief, architecture, evaluation reports
 .github/       CI: lint, migrate, test, migration round-trip, frontend build

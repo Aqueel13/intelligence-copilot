@@ -1,0 +1,94 @@
+# Action catalogue: the corrective actions the copilot may recommend for this domain.
+#
+# Each action names the policy clause that permits it and a *lever*: how the deterministic
+# what-if engine models its effect on the event log. The LLM chooses among these actions;
+# it never invents an impact number.
+#
+# Lever kinds:
+#   cap_wait          waiting time before `activity` capped at `target_hours` for matching claims
+#   remove_repeats    remove loop time: every occurrence of `always`, and repeat occurrences of
+#                     `repeats`. `fraction: excess` removes only the share above the baseline
+#                     rate of comparable claims (`baseline_dimension`), not every loop.
+#   cap_handoff_wait  handoffs on `weekday` from `from_hour` still wait for the next working
+#                     morning, but then only for the activity's typical (median) queue: the
+#                     backlog delay is removed, the weekend itself is not
+
+economics:
+  # ILLUSTRATIVE ASSUMPTIONS, editable. Shown alongside every ROI figure.
+  cost_per_breach_inr: 2500        # complaint handling, goodwill gestures, follow-up calls
+  staff_cost_per_hour_inr: 650     # loaded hourly cost of claims staff
+  team_lead_cost_per_hour_inr: 900
+
+actions:
+  delegate_mid_value_approvals:
+    title: Delegate ₹2L–₹5L approvals to Team Leads
+    description: >
+      Invoke the delegation clause so Team Leads approve claims above ₹2,00,000 up to
+      ₹5,00,000, keeping Senior Adjusters for claims above ₹5,00,000.
+    policy_refs: ["POL-002 §4.3", "POL-002 §5"]
+    effort: low
+    lever: { kind: cap_wait, activity: Senior Approval, target_hours: 24,
+             filters: { amount_band: ["₹2L–₹5L"] } }
+    annual_cost:
+      basis: Team Lead time, 0.5 hour per delegated approval
+      per_affected_claim_hours: 0.5
+      rate: team_lead_cost_per_hour_inr
+    operation: { type: update_approval_routing,
+                 params: { band_min_inr: 200000, band_max_inr: 500000, approver_role: Team Lead } }
+
+  add_senior_adjuster_capacity:
+    title: Add one Senior Adjuster
+    description: >
+      Hire or second one more Senior Adjuster so the approval queue meets the 24-hour target
+      for all claims above ₹2,00,000.
+    policy_refs: ["OPS-301 §4", "POL-002 §5"]
+    effort: high
+    lever: { kind: cap_wait, activity: Senior Approval, target_hours: 24 }
+    annual_cost:
+      basis: One Senior Adjuster, fully loaded
+      fixed_inr: 2400000
+    operation: { type: create_staffing_request, params: { role: Senior Adjuster, headcount: 1 } }
+
+  enforce_broker_checklist:
+    title: Enforce the document checklist for broker submissions
+    description: >
+      Make the broker portal checklist mandatory and put brokers below 85% first-time-right
+      on the quality improvement plan.
+    policy_refs: ["SOP-102 §3", "SOP-102 §4", "SOP-101 §3.2"]
+    effort: medium
+    lever: { kind: remove_repeats, always: ["Request Additional Documents"],
+             repeats: ["Document Check"], filters: { channel: [broker] },
+             fraction: excess, baseline_dimension: channel }
+    annual_cost:
+      basis: Portal change and broker refresher sessions (one-off, spread over a year)
+      fixed_inr: 400000
+    operation: { type: create_change_request,
+                 params: { system: Broker portal, change: Make checklist upload mandatory } }
+
+  retrain_team_b:
+    title: Targeted retraining and peer review for Team B
+    description: >
+      Apply the quality procedure: targeted retraining for the team and 100% peer review of
+      new joiners' verifications for 30 days.
+    policy_refs: ["SOP-105 §5.1", "OPS-301 §5"]
+    effort: low
+    lever: { kind: remove_repeats, repeats: ["Verification", "QA"],
+             filters: { team: [Team B] }, fraction: excess, baseline_dimension: team }
+    annual_cost:
+      basis: Two days of training for 5 staff plus 30 days of peer review time
+      fixed_inr: 150000
+    operation: { type: schedule_training, params: { team: Team B, programme: QA rejection reasons } }
+
+  saturday_rota:
+    title: Activate the Saturday half-day rota
+    description: >
+      Activate the optional Saturday 09:00–13:00 rota for Verification, QA and Finance Ops to
+      clear the Friday-afternoon backlog, so Monday starts with a normal queue.
+    policy_refs: ["POL-003 §2.2", "POL-003 §3"]
+    effort: medium
+    lever: { kind: cap_handoff_wait, weekday: Fri, from_hour: 15 }
+    annual_cost:
+      basis: 6 staff × 4 hours × 52 Saturdays
+      fixed_hours: 1248
+      rate: staff_cost_per_hour_inr
+    operation: { type: update_roster, params: { day: Saturday, hours: "09:00-13:00" } }

@@ -9,7 +9,7 @@ const NAV = [
   { to: '/overview', label: 'Overview', ready: true },
   { to: '/process', label: 'Process', ready: true },
   { to: '/knowledge', label: 'Knowledge', ready: true },
-  { to: '/investigate', label: 'Investigate', ready: false, milestone: 'M4' },
+  { to: '/investigate', label: 'Investigate', ready: true },
   { to: '/actions', label: 'Actions', ready: false, milestone: 'M5' },
 ]
 

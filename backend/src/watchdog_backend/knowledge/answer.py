@@ -128,10 +128,17 @@ def check_support(
             status, cited = "corrected", [best + 1]
         else:
             status, cited = "unsupported", model_cited
-        checks.append(SentenceCheck(
-            sentence=claim, model_cited=model_cited, cited=cited, status=status,
-            best_source=best + 1, best_score=scores[best], cited_score=cited_score,
-        ))  # fmt: skip
+        checks.append(
+            SentenceCheck(
+                sentence=claim,
+                model_cited=model_cited,
+                cited=cited,
+                status=status,
+                best_source=best + 1,
+                best_score=scores[best],
+                cited_score=cited_score,
+            )
+        )
     return checks
 
 
@@ -164,11 +171,19 @@ def answer_question(
 
     if not chunks:
         return Answer(
-            question=question, answer="No documents matched this question.", found=False,
-            grounded=True, citations=[], invalid_citations=[], checks=[],
-            model_citation_accuracy=None, sources=[], model=model_id,
-            retrieval_ms=retrieval_ms, generation_ms=0.0,
-        )  # fmt: skip
+            question=question,
+            answer="No documents matched this question.",
+            found=False,
+            grounded=True,
+            citations=[],
+            invalid_citations=[],
+            checks=[],
+            model_citation_accuracy=None,
+            sources=[],
+            model=model_id,
+            retrieval_ms=retrieval_ms,
+            generation_ms=0.0,
+        )
 
     started = time.perf_counter()
     try:
@@ -187,10 +202,17 @@ def answer_question(
         return Answer(
             question=question,
             answer="The policy documents don't answer this question.",
-            found=False, grounded=True, citations=[], invalid_citations=[], checks=[],
-            model_citation_accuracy=None, sources=chunks, model=model_id,
-            retrieval_ms=retrieval_ms, generation_ms=generation_ms,
-        )  # fmt: skip
+            found=False,
+            grounded=True,
+            citations=[],
+            invalid_citations=[],
+            checks=[],
+            model_citation_accuracy=None,
+            sources=chunks,
+            model=model_id,
+            retrieval_ms=retrieval_ms,
+            generation_ms=generation_ms,
+        )
 
     text, _, invalid = validate_citations(raw, len(chunks))
     checks = check_support(text, chunks, reranker)
