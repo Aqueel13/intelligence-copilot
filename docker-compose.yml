@@ -38,6 +38,9 @@ services:
     volumes:
       - ./backend/src:/app/src
       - ./backend/migrations:/app/migrations
+      # Resolved from /app as ../domain_packs and ../datasets/generated (the app defaults).
+      - ./domain_packs:/domain_packs:ro
+      - ./datasets:/datasets
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:

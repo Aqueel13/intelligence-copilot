@@ -1,4 +1,4 @@
-.PHONY: up down logs ps test lint fmt check migrate psql reset-db
+.PHONY: up down logs ps test lint fmt check migrate data psql reset-db
 
 up:            ## Build and start the full stack
 	docker compose up --build -d
@@ -14,6 +14,9 @@ ps:
 
 migrate:       ## Apply database migrations
 	docker compose run --rm migrate
+
+data:          ## Generate the synthetic dataset (seed 42) and load it into the database
+	cd backend && uv run python -m watchdog_backend.generator --load
 
 test:          ## Run backend tests (needs the stack's Postgres running)
 	cd backend && uv run pytest

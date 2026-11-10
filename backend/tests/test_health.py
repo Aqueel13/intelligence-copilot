@@ -1,13 +1,17 @@
-"""Health endpoint tests. Require a migrated Postgres at DATABASE_URL."""
+"""Health endpoint tests, against the migrated test database (see conftest)."""
 
+import pytest
 from fastapi.testclient import TestClient
 
-from watchdog_backend.main import app
 
-client = TestClient(app)
+@pytest.fixture(scope="module")
+def client(db_engine) -> TestClient:
+    from watchdog_backend.main import app
+
+    return TestClient(app)
 
 
-def test_health_reports_database_ready() -> None:
+def test_health_reports_database_ready(client) -> None:
     response = client.get("/api/health")
 
     assert response.status_code == 200, response.text
@@ -18,5 +22,5 @@ def test_health_reports_database_ready() -> None:
     assert body["database"]["missing_schemas"] == []
 
 
-def test_openapi_served_under_api_prefix() -> None:
+def test_openapi_served_under_api_prefix(client) -> None:
     assert client.get("/api/openapi.json").status_code == 200

@@ -1,0 +1,82 @@
+# Insurance Claims domain pack.
+# Everything specific to insurance lives here; the engine (tables, metrics, agents) is generic.
+
+domain: insurance_claims
+display_name: Insurance Claims (Motor & Health, reimbursement)
+version: 1
+
+case:
+  label: claim                # what one "case" is called in this domain
+  id_prefix: CLM
+  currency: INR
+  timezone: Asia/Kolkata
+
+sla:
+  name: Claim turnaround
+  target_hours: 120           # 5 calendar days, FNOL → Closed
+  start_activity: FNOL
+  end_activity: Closed
+
+calendar:
+  workdays: [mon, tue, wed, thu, fri]
+  start: "09:00"
+  end: "18:00"
+
+# Case attributes the analysis can filter and group by.
+# `source: attribute` = stored in the case's JSONB attributes.
+dimensions:
+  - name: line_of_business
+    label: Line of business
+    source: attribute
+    values: [motor, health]
+  - name: channel
+    label: Channel
+    source: attribute
+    values: [direct, broker, agent]
+  - name: region
+    label: Region
+    source: attribute
+    values: [Mumbai, Delhi NCR, Bengaluru, Chennai, Hyderabad, Kolkata, Pune]
+  - name: team
+    label: Verification team
+    source: attribute
+    values: [Team A, Team B, Team C]
+  - name: amount_band
+    label: Claim amount band
+    source: amount_band
+    bands:                    # upper bounds in INR; last band is open-ended
+      - { label: "< ₹50K", max: 50000 }
+      - { label: "₹50K–₹2L", max: 200000 }
+      - { label: "₹2L–₹5L", max: 500000 }
+      - { label: "> ₹5L" }
+  - name: month
+    label: FNOL month
+    source: opened_month
+
+activities:
+  - { name: FNOL, label: First Notice of Loss }
+  - { name: Document Check }
+  - { name: Request Additional Documents, kind: customer_wait }
+  - { name: Survey & Loss Assessment, applies_to: { line_of_business: motor } }
+  - { name: Medical Adjudication, applies_to: { line_of_business: health } }
+  - { name: Verification }
+  - { name: QA }
+  - { name: Senior Approval }
+  - { name: Settlement }
+  - { name: Closed }
+
+approval:
+  senior_threshold_inr: 200000          # claims above this need senior adjuster sign-off
+  senior_target_hours: 24
+  delegation:
+    # Permitted by policy but NOT currently enabled: the recommendation the copilot should find.
+    band_min_inr: 200000
+    band_max_inr: 500000
+    delegate_role: Team Lead
+    status: permitted_not_enabled
+    requires: Head of Claims sign-off
+
+feedback:
+  survey_delay_days: [1, 3]
+  csat_scale: [1, 5]
+  nps_scale: [0, 10]

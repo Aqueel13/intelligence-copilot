@@ -1,0 +1,127 @@
+# Metric catalogue for Insurance Claims.
+#
+# This file is TRUSTED CONFIGURATION written by developers. The LLM never edits it:
+# it only chooses a metric by name, plus filters/grouping from the allowlisted dimensions.
+#
+# base:        which fact view the metric aggregates over
+#   cases     → operational.case_facts     (one row per claim)
+#   events    → operational.event_facts    (one row per activity occurrence)
+#   feedback  → operational.feedback_facts (one row per survey sent)
+# expression:  a SQL aggregate over that view's columns
+# sample:      (optional) SQL aggregate counting the rows the value rests on; default count(*)
+# unit:        for display and for the LLM to describe the number correctly
+
+metrics:
+  case_count:
+    base: cases
+    label: Claims
+    description: Number of claims opened (FNOL) in the period.
+    expression: count(*)
+    unit: count
+
+  sla_breach_rate:
+    base: cases
+    label: SLA breach rate
+    description: Share of claims that took longer than the 5-day SLA from FNOL to Closed.
+    expression: avg(breached::int)
+    unit: ratio
+
+  avg_cycle_days:
+    base: cases
+    label: Average cycle time
+    description: Mean calendar days from FNOL to Closed.
+    expression: avg(cycle_hours) / 24
+    unit: days
+
+  median_cycle_days:
+    base: cases
+    label: Median cycle time
+    description: Median calendar days from FNOL to Closed.
+    expression: percentile_cont(0.5) WITHIN GROUP (ORDER BY cycle_hours) / 24
+    unit: days
+
+  p90_cycle_days:
+    base: cases
+    label: 90th percentile cycle time
+    description: 90% of claims close within this many calendar days.
+    expression: percentile_cont(0.9) WITHIN GROUP (ORDER BY cycle_hours) / 24
+    unit: days
+
+  rework_rate:
+    base: cases
+    label: Verification rework rate
+    description: Share of claims where Verification had to be repeated after a QA rejection.
+    expression: avg((coalesce((activity_counts->>'Verification')::int, 0) > 1)::int)
+    unit: ratio
+
+  doc_request_rate:
+    base: cases
+    label: Additional documents requested
+    description: Share of claims where the customer was asked for additional documents at least once.
+    expression: avg((activity_counts ? 'Request Additional Documents')::int)
+    unit: ratio
+
+  senior_approval_rate:
+    base: cases
+    label: Senior approval rate
+    description: Share of claims that required senior adjuster approval.
+    expression: avg((activity_counts ? 'Senior Approval')::int)
+    unit: ratio
+
+  avg_claim_amount:
+    base: cases
+    label: Average claim amount
+    description: Mean claimed amount.
+    expression: avg(amount)
+    unit: inr
+
+  avg_wait_hours:
+    base: events
+    label: Average waiting time
+    description: Mean calendar hours an activity waited in queue after the previous activity finished. Group by activity to find bottlenecks.
+    expression: avg(wait_hours)
+    unit: hours
+
+  p90_wait_hours:
+    base: events
+    label: 90th percentile waiting time
+    description: 90% of activity instances waited less than this many calendar hours.
+    expression: percentile_cont(0.9) WITHIN GROUP (ORDER BY wait_hours)
+    unit: hours
+
+  avg_work_hours:
+    base: events
+    label: Average working time
+    description: Mean calendar hours from activity start to finish.
+    expression: avg(work_hours)
+    unit: hours
+
+  event_count:
+    base: events
+    label: Activity instances
+    description: Number of activity occurrences, including repeats.
+    expression: count(*)
+    unit: count
+
+  survey_response_rate:
+    base: feedback
+    label: Survey response rate
+    description: Share of post-closure surveys that received a response.
+    expression: avg(responded::int)
+    unit: ratio
+
+  avg_csat:
+    base: feedback
+    label: Average CSAT (respondents only)
+    description: Mean 1–5 satisfaction score among customers who responded. Respondents are not a random sample.
+    expression: avg(csat)
+    sample: count(*) FILTER (WHERE responded)
+    unit: score_1_5
+
+  nps:
+    base: feedback
+    label: Net Promoter Score (respondents only)
+    description: Percentage of promoters (9–10) minus percentage of detractors (0–6), among respondents.
+    expression: 100.0 * (avg((nps >= 9)::int) FILTER (WHERE responded) - avg((nps <= 6)::int) FILTER (WHERE responded))
+    sample: count(*) FILTER (WHERE responded)
+    unit: nps

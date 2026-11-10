@@ -20,6 +20,12 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://watchdog:watchdog@localhost:5432/watchdog"
 
+    # Domain packs: directory containing one folder per pack, and the active pack.
+    domain_packs_dir: str = "../domain_packs"
+    domain_pack: str = "insurance_claims"
+    # Generated synthetic data and ground truth (git-ignored, reproducible from the seed).
+    datasets_dir: str = "../datasets/generated"
+
     # Comma-separated list of allowed browser origins.
     cors_origins: str = "http://localhost:5173"
 

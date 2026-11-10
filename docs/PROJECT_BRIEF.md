@@ -71,7 +71,7 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 
 | ID | Root cause | How it shows in the data | Corroborating document |
 |----|-----------|--------------------------|------------------------|
-| RC1 | High-value claims (> ₹5L) wait for senior adjuster approval; the senior queue is understaffed | Long waiting time before `Senior Approval`; ~3 days vs a 24h policy | Approval matrix + SLA policy (24h senior-approval target) |
+| RC1 | High-value claims (> ₹2L) wait for senior adjuster approval; the senior queue is understaffed | Long waiting time before `Senior Approval`; ~4 days (96h average) vs a 24h policy, worsening Apr → Sep | Approval matrix (senior sign-off above ₹2,00,000) + SLA policy (24h senior-approval target) |
 | RC2 | Broker-channel claims are often missing documents at intake | `Request Additional Documents` loop on ~20% of broker claims, adding ~2–3 days | Intake SOP requires a document checklist at FNOL |
 | RC3 | One verification team has a high QA rejection rate | Rework loop `Verification → QA → Verification` ~18% for Team B vs ~5% for others | QA SOP / verification guidelines |
 | RC4 | Handoffs late on Fridays sit idle over the weekend | Larger waiting time for cases handed off Friday after 15:00 | Working-hours policy (no weekend coverage) |
@@ -82,11 +82,48 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 |----|-----------|----------|
 | DC1 | "Health claims are slower" | Confounded by claim value: health claims skew high-value, so the real cause is RC1. |
 | DC2 | "The Pune region is underperforming" | Small sample; not statistically meaningful. |
+| DC3 | "Average CSAT is 2.9, so customers are broadly unhappy" | Response bias: dissatisfied customers respond more often. The raw average understates true satisfaction and must be reported with its sample caveat. |
 
-The evaluation checks that the system **finds RC1–RC4** and **does not report DC1–DC2 as root causes**.
+The evaluation checks that the system **finds RC1–RC4** and **does not report DC1–DC3 as conclusions**.
+
+### Process flows (reimbursement claims; cashless pre-authorisation is out of v1)
+
+```
+Motor:  FNOL → Document Check → (Request Docs loop) → Survey & Loss Assessment → Verification → QA → (Senior Approval > ₹2L) → Settlement → Closed
+Health: FNOL → Document Check → (Request Docs loop) → Medical Adjudication     → Verification → QA → (Senior Approval > ₹2L) → Settlement → Closed
+```
+
+Survey = IRDAI-licensed surveyor inspects the vehicle and files a loss assessment. Medical Adjudication = TPA or in-house medical team reviews bills and coverage.
+
+### Customer satisfaction survey (post-closure)
+
+- **Separate table** (`claim_feedback`), not a process event, so it can't distort cycle times or appear as a bottleneck.
+- Fields: `claim_id`, `sent_at`, `responded_at`, `csat` (1–5), `nps` (0–10), `comment`.
+- Sent 1–3 days after closure; a minority responds, and dissatisfied customers respond more often (planted bias, DC3).
+- **Scores are driven by the planted causes.** Claims affected by RC1–RC4 score lower, so investigations can quantify customer impact per root cause.
+- **Comments are generated from templates** with varied wording that reference the claim's actual experience (re-requested documents, approval waits, surveyor no-shows). No LLM is used, so the data is reproducible and the ground truth is exact.
+- Data lands in M1. A feedback/theme-analysis tool for the agents comes in M4.
 
 ### Data volumes
-- ~5,000 claims, ~25,000 events, 10–15 policy/SOP documents (generated, realistic, internally consistent with the planted causes).
+- ~5,000 claims, ~38,000 events, ~1,250 survey responses, 10–15 policy/SOP documents (generated, realistic, internally consistent with the planted causes).
+
+### Calibrated ground truth (seed 42, M1)
+
+Computed by exact counterfactual: each claim is re-simulated with one cause switched off, using identical randomness. A breach is *attributable* to a cause if removing that cause alone would have met the SLA.
+
+| | Value |
+|---|---|
+| SLA breach rate | 31.0% (10.0% with no planted cause) |
+| RC1 senior approval queue | 40.4% of breaches · 1,239 claims affected |
+| RC2 broker missing documents | 8.0% of breaches · 274 claims |
+| RC3 Team B rework | 4.9% of breaches · 206 claims |
+| RC4 late-Friday handoffs | 6.4% of breaches · 847 claims |
+| Delegating ₹2L–₹5L approvals | avoids 33% of breaches |
+| DC1 | health ≈ motor within each amount band (e.g. 3.07 vs 3.16 days below ₹50K) |
+| DC2 | Pune: 58 claims, 66% broker (vs 30% elsewhere) |
+| DC3 | respondent CSAT 3.58 vs true 3.91; 25% response rate |
+
+Calibration ranges are enforced by tests, so a generator change that weakens the story fails CI.
 
 ## 6. Architecture (prototype)
 

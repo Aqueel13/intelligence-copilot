@@ -9,9 +9,12 @@ requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.20.1",
     "fastapi>=0.162.2",
+    "numpy>=2.5.4",
+    "pandas>=3.1.1",
     "pgvector>=0.5.1",
     "psycopg[binary]>=3.3.8",
     "pydantic-settings>=2.16.2",
+    "pyyaml>=6.0.3",
     "sqlalchemy>=2",
     "uvicorn[standard]>=0.54.0",
 ]
@@ -23,8 +26,10 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "httpx2>=2.16.0",
+    "pandas-stubs>=3.1.0.261029",
     "pytest>=9.2.0",
     "ruff>=0.17.4",
+    "types-pyyaml>=6.0.12.20261103",
 ]
 
 [tool.ruff]
@@ -33,6 +38,8 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+# Domain labels intentionally use the en dash and rupee sign (e.g. "₹2L–₹5L").
+allowed-confusables = ["–"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
