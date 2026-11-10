@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { api } from '../api/client'
 import { watchApi } from '../api/investigation'
@@ -119,18 +119,15 @@ function DomainSwitcher() {
 /** Who is signed in, their roles here, sign out; admins can act as another user (audited). */
 function UserMenu() {
   const { me } = useAuth()
-  const qc = useQueryClient()
   const realAdmin = (me?.real_user ?? me?.user)?.platform_role === 'admin'
   const users = useQuery({ queryKey: ['auth-users'], queryFn: authApi.users, enabled: realAdmin, staleTime: 60_000 })
   if (!me) return null
   const switchTo = async (id: string) => {
     await authApi.actAs(id === (me.real_user ?? me.user).user_id ? null : id)
-    qc.clear()
-    await qc.invalidateQueries()
+    window.location.reload() // every screen re-renders as the new identity
   }
   const logout = async () => {
     await authApi.logout()
-    qc.clear()
     window.location.assign('/')
   }
   return (

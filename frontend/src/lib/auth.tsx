@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { createContext, useContext, useState, type FormEvent, type ReactNode } from 'react'
 import { authApi, Unauthorized, type Me } from '../api/auth'
 
@@ -32,7 +32,6 @@ export function MeProvider({ children }: { children: ReactNode }) {
 export const useAuth = () => useContext(Ctx)
 
 function Login() {
-  const qc = useQueryClient()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -43,8 +42,9 @@ function Login() {
     setError(null)
     try {
       await authApi.login(email, password)
-      qc.clear()
-      await qc.invalidateQueries()
+      // A fresh start: every query (and the sign-in gate itself) refetches as the new user.
+      window.location.reload()
+      return
     } catch (err) {
       setError(err instanceof Unauthorized ? 'Wrong email or password.' : String((err as Error).message))
     } finally {
@@ -83,7 +83,7 @@ function Login() {
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
         <p className="mt-4 text-[11px] text-ink-muted">
-          Local accounts (`make users`). Demo accounts are named after each pack's governance users, e.g. a.rao@demo.watchdog.
+          Local accounts (`make users`). Demo accounts are named after each pack's governance users, e.g. aqueel.kanchwala@demo.watchdog.
         </p>
       </form>
     </div>
