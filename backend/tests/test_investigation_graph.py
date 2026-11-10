@@ -457,3 +457,53 @@ def test_coverage_never_adds_weak_or_small_sample_signals() -> None:
         ),
     ]
     assert apply_coverage([], signals) == ([], 0)
+
+
+# --- concurrency and deadlines --------------------------------------------------------------
+
+
+def test_local_ollama_gets_one_call_at_a_time() -> None:
+    from langchain_ollama import ChatOllama
+
+    from watchdog_backend.config import get_settings
+    from watchdog_backend.llm.gateway import max_concurrency
+
+    assert (
+        max_concurrency(ChatOllama(model="qwen2.5:7b")) == get_settings().ollama_parallel_calls == 1
+    )
+    assert max_concurrency(_model()) == get_settings().llm_parallel_calls
+
+
+def test_deadline_counts_only_the_calls_own_time(monkeypatch) -> None:
+    """20 simultaneous 0.5 s calls with a 1.5 s deadline must all succeed: no call may spend
+    its deadline queued behind others on our side."""
+    import time as _time
+    from concurrent.futures import ThreadPoolExecutor
+
+    from watchdog_backend.config import get_settings
+    from watchdog_backend.llm.gateway import invoke_with_deadline
+
+    monkeypatch.setattr(get_settings(), "llm_call_deadline_seconds", 1.5)
+
+    class Slow:
+        def invoke(self, payload):
+            _time.sleep(0.5)
+            return payload
+
+    with ThreadPoolExecutor(max_workers=20) as pool:
+        results = list(pool.map(lambda i: invoke_with_deadline(Slow(), i), range(20)))
+    assert results == list(range(20))
+
+
+# google-genai's own source has an invalid escape sequence; that warning is not ours.
+@pytest.mark.filterwarnings("ignore::SyntaxWarning")
+def test_every_provider_has_an_output_cap(monkeypatch) -> None:
+    from watchdog_backend.config import get_settings
+    from watchdog_backend.llm.gateway import ModelSpec, build_chat_model
+
+    s = get_settings()
+    monkeypatch.setattr(s, "groq_api_key", "test")
+    monkeypatch.setattr(s, "gemini_api_key", "test")
+    assert build_chat_model(ModelSpec("ollama", "m")).num_predict == s.ollama_max_output_tokens
+    assert build_chat_model(ModelSpec("groq", "m")).max_tokens == s.llm_max_output_tokens
+    assert build_chat_model(ModelSpec("gemini", "m")).max_output_tokens == s.llm_max_output_tokens

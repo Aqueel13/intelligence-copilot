@@ -23,7 +23,6 @@ from sqlalchemy import Connection
 
 from watchdog_backend.analytics.metrics import MetricQuery, MetricQueryError, MetricsEngine
 from watchdog_backend.analytics.process import ProcessAnalyzer, ProcessQuery
-from watchdog_backend.config import get_settings
 from watchdog_backend.investigation import llm
 from watchdog_backend.investigation.actions import (
     ActionImpact,
@@ -50,6 +49,7 @@ from watchdog_backend.investigation.verify import NumberCheck, verify_numbers
 from watchdog_backend.knowledge.answer import Answer, answer_question
 from watchdog_backend.knowledge.models import Reranker
 from watchdog_backend.knowledge.retrieval import Retriever
+from watchdog_backend.llm.gateway import max_concurrency
 
 DIMENSIONS = ["line_of_business", "channel", "region", "team", "amount_band"]
 MAX_SIGNALS_FOR_PLANNER = 12
@@ -460,8 +460,9 @@ def build_graph(deps: Deps):
 
     def assess(state: InvestigationState) -> dict:
         hypotheses = state["hypotheses"]
-        # Hypotheses are independent: judge them concurrently (order is preserved).
-        workers = max(1, min(get_settings().llm_parallel_calls, len(hypotheses)))
+        # Hypotheses are independent: judge them concurrently where the model's server can
+        # actually serve concurrent requests (order is preserved).
+        workers = max(1, min(max_concurrency(deps.model("assessor")[0]), len(hypotheses)))
         with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="assess") as pool:
             assessed = list(pool.map(assess_one, hypotheses))
 

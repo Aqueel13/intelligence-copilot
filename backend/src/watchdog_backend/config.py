@@ -39,6 +39,13 @@ class Settings(BaseSettings):
     llm_call_deadline_seconds: float = 180.0  # wall clock for a whole call
     llm_max_retries: int = 2  # provider-level retries (rate limits honour Retry-After)
     llm_parallel_calls: int = 4  # concurrent LLM calls where work is independent (assessment)
+    ollama_parallel_calls: int = 1  # a single local GPU serves one request at a time
+    # Output caps. Without one, a small model can fall into a repetition loop inside a
+    # JSON string and generate forever (Ollama's default is unlimited); the server keeps
+    # generating even after the client gives up, blocking every later request.
+    # Cloud reasoning models count hidden reasoning against the cap, hence the larger value.
+    ollama_max_output_tokens: int = 1536
+    llm_max_output_tokens: int = 4096
     ollama_base_url: str = "http://localhost:11434"
     groq_api_key: str | None = None
     gemini_api_key: str | None = None

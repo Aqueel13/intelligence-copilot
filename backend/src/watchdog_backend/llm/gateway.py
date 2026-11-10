@@ -8,8 +8,7 @@ Callers ask for a role (`get_chat_model("answer")`), never a provider, so swappi
 configuration only. Every call site gets the model's identity back for logging/evaluation.
 """
 
-from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import TimeoutError as FuturesTimeout
+import threading
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
@@ -55,21 +54,41 @@ def describe_provider_error(exc: BaseException) -> str:
     return f"{type(exc).__name__}: {message[:200]}"
 
 
-_DEADLINE_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="llm-deadline")
-
-
 def invoke_with_deadline(runnable: Any, payload: Any, model_id: str = "model") -> Any:
     """Invoke with a WALL-CLOCK deadline. Provider timeouts are per read; a degraded server
     that streams one token a minute never trips them and can stall a request for many
     minutes. On expiry the call is abandoned (its thread finishes in the background) and a
-    TimeoutError is raised, which callers report as a model failure."""
+    TimeoutError is raised, which callers report as a model failure.
+
+    Each call gets its own thread, so the clock covers this call's own execution only, never
+    time spent waiting behind other calls in a local pool."""
     seconds = get_settings().llm_call_deadline_seconds
-    future = _DEADLINE_POOL.submit(runnable.invoke, payload)
-    try:
-        return future.result(timeout=seconds)
-    except FuturesTimeout as exc:
-        future.cancel()
-        raise TimeoutError(f"{model_id} did not finish within {seconds:.0f} s") from exc
+    outcome: dict[str, Any] = {}
+
+    def work() -> None:
+        try:
+            outcome["value"] = runnable.invoke(payload)
+        except BaseException as exc:  # re-raised in the caller's thread below
+            outcome["error"] = exc
+
+    thread = threading.Thread(target=work, name=f"llm-{model_id}", daemon=True)
+    thread.start()
+    thread.join(timeout=seconds)
+    if thread.is_alive():
+        raise TimeoutError(f"{model_id} did not finish within {seconds:.0f} s")
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome["value"]
+
+
+def max_concurrency(model: Any) -> int:
+    """How many calls to send this model at once. A local Ollama server on one GPU serves
+    requests one at a time: concurrent requests only queue there, and queued requests burn
+    their deadline while waiting. Cloud providers serve concurrently."""
+    from langchain_ollama import ChatOllama
+
+    s = get_settings()
+    return s.ollama_parallel_calls if isinstance(model, ChatOllama) else s.llm_parallel_calls
 
 
 @dataclass(frozen=True)
@@ -106,6 +125,7 @@ def build_chat_model(spec: ModelSpec, temperature: float = 0.0) -> BaseChatModel
             base_url=s.ollama_base_url,
             temperature=temperature,
             num_ctx=8192,  # Ollama defaults to 4096, too small for investigation prompts
+            num_predict=s.ollama_max_output_tokens,  # never generate without bound
             client_kwargs={"timeout": s.llm_timeout_seconds},
         )
     if spec.provider == "groq":
@@ -117,6 +137,7 @@ def build_chat_model(spec: ModelSpec, temperature: float = 0.0) -> BaseChatModel
             model=spec.model,
             api_key=s.groq_api_key,
             temperature=temperature,
+            max_tokens=s.llm_max_output_tokens,
             timeout=s.llm_timeout_seconds,
             max_retries=s.llm_max_retries,
         )
@@ -128,6 +149,7 @@ def build_chat_model(spec: ModelSpec, temperature: float = 0.0) -> BaseChatModel
         model=spec.model,
         google_api_key=s.gemini_api_key,
         temperature=temperature,
+        max_output_tokens=s.llm_max_output_tokens,
         timeout=s.llm_timeout_seconds,
         max_retries=s.llm_max_retries,
     )

@@ -1,6 +1,6 @@
 # Evaluation report
 
-Generated from 3 run(s): `2026-11-10T14:23:19`, `2026-11-10T14:43:04`, `2026-11-10T15:54:20`. Models: `groq:openai/gpt-oss-120b`, `groq:openai/gpt-oss-20b`, `groq:qwen/qwen3.8-27b`, `ollama:qwen2.5:7b`. Generator seeds: [7, 42, 1234].
+Generated from 4 run(s): `2026-11-10T14:23:19`, `2026-11-10T14:43:04`, `2026-11-10T15:54:20`, `2026-11-10T19:27:50`. Models: `groq:openai/gpt-oss-120b`, `groq:openai/gpt-oss-20b`, `groq:qwen/qwen3.8-27b`, `ollama:qwen2.5:7b`. Generator seeds: [7, 42, 1234].
 
 All results are measured, not targets. Failed runs are reported, not dropped. Every investigation is scored against the generator's planted ground truth (`investigation/scoring.py`): a planted cause counts as found only if a hypothesis that targets it is *supported*; a decoy counts as accepted if a supported hypothesis rests only on it.
 
@@ -13,7 +13,7 @@ Quality columns cover completed runs only. *Rate-limited* runs never reached the
 | `groq:openai/gpt-oss-120b` | 9 | 6 | 3 | 0 | 79% | 4/6 | 0/4 runs | 5 | 0.00 | 86 s | 10.0 | 16,340 |
 | `groq:openai/gpt-oss-20b` | 9 | 7 | 2 | 0 | 100% | 7/7 | 0/5 runs | 5 | 0.00 | 123 s | 10.9 | 19,349 |
 | `groq:qwen/qwen3.8-27b` | 9 | 9 | 0 | 0 | 97% | 8/9 | 0/6 runs | 1 | 0.00 | 189 s | 13.4 | 14,058 |
-| `ollama:qwen2.5:7b` | 9 | 9 | 0 | 0 | 100% | 9/9 | 0/6 runs | 14 | 0.00 | 89 s | 11.1 | 10,029 |
+| `ollama:qwen2.5:7b` | 9 | 9 | 0 | 0 | 100% | 9/9 | 0/6 runs | 22 | 0.00 | 101 s | 12.1 | 11,575 |
 
 ### By question
 
@@ -50,7 +50,7 @@ How often the deterministic safeguards changed the outcome:
 | `groq:openai/gpt-oss-120b` | 7 | 5 | 0 | 0 | 1/6 | 4/6 |
 | `groq:openai/gpt-oss-20b` | 20 | 5 | 0 | 0 | 2/7 | 5/7 |
 | `groq:qwen/qwen3.8-27b` | 4 | 1 | 0 | 0 | 0/9 | 6/9 |
-| `ollama:qwen2.5:7b` | 18 | 14 | 0 | 0 | 1/9 | 5/9 |
+| `ollama:qwen2.5:7b` | 34 | 15 | 0 | 7 | 1/9 | 3/9 |
 
 Downgrades stop decoys (a model calling a confounded effect a cause). Upgrades and confirmed findings stop over-caution: the evidence rule only ever adds or upgrades hypotheses worded by code from evidence that is significant, large enough, not a small sample and not explained by any confounder; a sentence the model wrote is never re-judged. Runs made before the upgrade rules existed (the first local and cloud runs) could only downgrade.
 
@@ -99,12 +99,25 @@ the fixed code:
    supported hypothesis covers, becomes a separate "Evidence-confirmed" finding. Tests show a
    model that calls everything inconclusive, or refutes everything, still surfaces the strong
    planted causes, and the health decoy is never confirmed.
-7. **Assessment runs in parallel** (`LLM_PARALLEL_CALLS`, default 4). On the local 6 GB GPU
-   Ollama serialises requests, so the gain there is small (≈12%); cloud providers serve
-   concurrently.
+7. **Assessment runs in parallel for cloud models** (`LLM_PARALLEL_CALLS`, default 4). A local
+   single-GPU Ollama serves one request at a time, so it gets one call at a time
+   (`OLLAMA_PARALLEL_CALLS`, default 1; parallelism gained only ≈12% there). Every call also
+   runs on its own thread, so its deadline never includes time queued behind other calls on
+   our side.
 8. **A coverage bug:** a breach-trend signal ended the coverage loop (`break` instead of
    `continue`), so weaker signals after it were never considered; and the 7-hypothesis cap could
    crowd out a strong signal. Fixed, cap raised to 9, rule extracted and tested directly.
+
+9. **The real cause of the Ollama hangs was unbounded generation, not concurrency.** I first
+   blamed concurrent requests (item 7); after making calls sequential, the broker run still
+   timed out and every later request failed. Ollama's default output limit is unlimited, and
+   with JSON-schema constrained output the 7B model occasionally falls into a repetition loop
+   inside a string field and generates forever. Tokens keep streaming, so per-read timeouts
+   never fire; the wall-clock deadline fires, but the abandoned request keeps the connection
+   open, Ollama keeps generating, and because it serves one request at a time every later
+   request queues behind it. Every provider now has an output cap (Ollama 1,536 tokens, cloud
+   4,096 because reasoning models count hidden reasoning against it); the largest legitimate
+   structured output measured was 551 tokens.
 
 **Not yet re-run (provider quota).** The cloud runs started at 14:43, a minute before fix 2
 was applied, so the three Groq models' `broker_channel` results predate it; their low "remedy
@@ -121,13 +134,22 @@ confounder checks showed the effect persisting, and left the correct claim-value
 "inconclusive" in one health-vs-motor run. Rules A and B now surface such causes as
 separate, code-worded findings; the model's own sentences are still never re-judged.
 
-3 earlier result(s) were re-run after a fix and replaced:
+12 earlier result(s) were re-run after a fix and replaced:
 
 | Suite | Model | Seed | Question | Earlier result |
 |---|---|---|---|---|
 | investigation | `ollama:qwen2.5:7b` | 7 | `broker_channel` | recall 100%, remedy recommended 0/1 |
+| investigation | `ollama:qwen2.5:7b` | 7 | `sla_root_causes` | recall 100%, remedy recommended 4/4 |
+| investigation | `ollama:qwen2.5:7b` | 7 | `health_vs_motor` | recall 100%, remedy recommended 1/1 |
+| investigation | `ollama:qwen2.5:7b` | 7 | `broker_channel` | recall 100%, remedy recommended 1/1 |
 | investigation | `ollama:qwen2.5:7b` | 42 | `broker_channel` | recall 100%, remedy recommended 0/1 |
+| investigation | `ollama:qwen2.5:7b` | 42 | `sla_root_causes` | recall 100%, remedy recommended 3/4 |
+| investigation | `ollama:qwen2.5:7b` | 42 | `health_vs_motor` | recall 100%, remedy recommended 1/1 |
+| investigation | `ollama:qwen2.5:7b` | 42 | `broker_channel` | recall 100%, remedy recommended 1/1 |
 | investigation | `ollama:qwen2.5:7b` | 1234 | `broker_channel` | recall 100%, remedy recommended 0/1 |
+| investigation | `ollama:qwen2.5:7b` | 1234 | `sla_root_causes` | recall 100%, remedy recommended 3/4 |
+| investigation | `ollama:qwen2.5:7b` | 1234 | `health_vs_motor` | recall 100%, remedy recommended 1/1 |
+| investigation | `ollama:qwen2.5:7b` | 1234 | `broker_channel` | recall 100%, remedy recommended 1/1 |
 
 ## 2. Failures and misses (every one)
 
