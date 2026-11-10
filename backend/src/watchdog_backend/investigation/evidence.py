@@ -249,6 +249,9 @@ def _weekday(ctx: EvidenceContext, c: WeekdayCheck, auto: bool) -> EvidenceItem:
             "late_mean_wait": float(late["wait_hours"].mean()),
             "other_days_mean_wait": float(others["wait_hours"].mean()),
             "late_claims": int(late["case_id"].nunique()),
+            "breach_with": cmp.rate_in,
+            "breach_without": cmp.rate_out,
+            "p_value": cmp.p_value,
         },
     )
 
@@ -285,3 +288,71 @@ def describe_check(check: Check) -> str:
     if isinstance(check, WeekdayCheck):
         return f"Waiting time after {check.weekday} handoffs"
     return f"Policy: {check.query}"
+
+
+# --------------------------------------------------------------------- strong support
+
+SEGMENT_MIN_DIFF = {"breached": 0.05, "doc_requested": 0.10, "rework": 0.10}
+MECHANISM_MIN_DIFF = 0.10
+BOTTLENECK_MIN_BREACH_GAP = 0.20
+
+
+def strong_support(e: EvidenceItem) -> str | None:
+    """Does this single piece of evidence, on its own, establish a contributing cause?
+
+    Deliberately strict: significant, not a small sample, not explained by any confounder,
+    large enough to matter, and (for loops and handoffs) a mechanism linking it to breaches.
+    Returns the reason in plain words, or None.
+    """
+    if not e.ok:
+        return None
+    d = e.data
+    if isinstance(e.check, SegmentCheck):
+        if not d.get("significant") or d.get("low_sample") or e.explained_by:
+            return None
+        if d.get("difference", 0) < SEGMENT_MIN_DIFF[e.check.outcome]:
+            return None
+        if e.check.outcome != "breached":
+            m = d.get("mechanism") or {}
+            if m.get("p_value", 1) >= 0.01:
+                return None
+            if m.get("breach_with", 0) - m.get("breach_without", 0) < MECHANISM_MIN_DIFF:
+                return None
+        return (
+            f"{describe_check(e.check)}: {d['rate_in']:.1%} vs {d['rate_out']:.1%}, "
+            f"significant, not explained by any confounder"
+        )
+    if isinstance(e.check, ActivityWaitCheck):
+        gap = (d.get("breach_rate_with") or 0) - (d.get("breach_rate_without") or 0)
+        if (
+            d.get("is_bottleneck")
+            and d.get("breach_rate_without") is not None
+            and gap >= BOTTLENECK_MIN_BREACH_GAP
+        ):
+            return (
+                f"'{e.check.activity}' is a bottleneck and claims through it breach "
+                f"{d['breach_rate_with']:.0%} vs {d['breach_rate_without']:.0%}"
+            )
+        return None
+    if isinstance(e.check, WeekdayCheck):
+        if (
+            d.get("p_value", 1) < 0.01
+            and d.get("breach_with", 0) - d.get("breach_without", 0) >= MECHANISM_MIN_DIFF
+        ):
+            return (
+                f"claims with a late {e.check.weekday} handoff breach "
+                f"{d['breach_with']:.0%} vs {d['breach_without']:.0%}, significant"
+            )
+        return None
+    return None
+
+
+def target_key(check: Check) -> tuple | None:
+    """What a check is about, for de-duplicating findings across hypotheses."""
+    if isinstance(check, SegmentCheck):
+        return ("segment", check.dimension, check.value, check.outcome)
+    if isinstance(check, ActivityWaitCheck):
+        return ("activity", check.activity)
+    if isinstance(check, WeekdayCheck):
+        return ("weekday", check.weekday)
+    return None

@@ -27,16 +27,36 @@ the fixed code:
    provider retries. Provider retries are now configurable (`LLM_MAX_RETRIES`); the evaluation
    used 8, and the SDK waits for the Retry-After the provider sends.
 
+**Improvements made after reading the results** (same day; local runs repeated as `2026-11-10-local-v2`):
+
+6. **Over-caution is now corrected, safely.** All model misses were causes the model would not
+   commit to. Code cannot safely re-judge a sentence the model wrote (refuting "the broker effect
+   is confounded" was *correct* when the check showed it persisting), so two rules act only on
+   code-worded hypotheses: (A) a coverage hypothesis whose own evidence meets strict criteria
+   (significant, ≥5 points for breach rates / ≥10 for loops, not a small sample, not explained
+   by any confounder, and a significant mechanism for loops and handoffs) is upgraded to
+   supported; (B) strong evidence inside a hypothesis the model did not support, and that no
+   supported hypothesis covers, becomes a separate "Evidence-confirmed" finding. Tests show a
+   model that calls everything inconclusive, or refutes everything, still surfaces the strong
+   planted causes, and the health decoy is never confirmed.
+7. **Assessment runs in parallel** (`LLM_PARALLEL_CALLS`, default 4). On the local 6 GB GPU
+   Ollama serialises requests, so the gain there is small (≈12%); cloud providers serve
+   concurrently.
+8. **A coverage bug:** a breach-trend signal ended the coverage loop (`break` instead of
+   `continue`), so weaker signals after it were never considered; and the 7-hypothesis cap could
+   crowd out a strong signal. Fixed, cap raised to 9, rule extracted and tested directly.
+
 **Not yet re-run (provider quota).** The cloud runs started at 14:43, a minute before fix 2
 was applied, so the three Groq models' `broker_channel` results predate it; their low "remedy
 recommended" counts on that question reflect the bug, not the models. The local model was
 re-run after the fix (3/3). Re-running the cloud models, and the five runs refused by Groq's
 200,000-tokens-per-day free-tier quota, needs the rolling quota to recover (about 24 hours).
 
-**Known limitation found by this evaluation.** The deterministic overrides only ever
-*downgrade* a verdict (e.g. "supported" → "refuted" when a confounder explains the effect).
+**Limitation found by this evaluation (addressed by 6 above).** The deterministic overrides
+used to only *downgrade* a verdict (e.g. "supported" → "refuted" when a confounder explains the effect).
 Nothing yet catches a model wrongly *refuting* or leaving *inconclusive* a hypothesis the
 evidence supports. All model misses above are of that kind (over-caution), never an accepted
 decoy: gpt-oss-120b refuted the broker hypothesis as "confounded by claim amounts" although its
 confounder checks showed the effect persisting, and left the correct claim-value explanation
-"inconclusive" in one health-vs-motor run.
+"inconclusive" in one health-vs-motor run. Rules A and B now surface such causes as
+separate, code-worded findings; the model's own sentences are still never re-judged.

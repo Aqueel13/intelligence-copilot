@@ -59,6 +59,8 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 | D34 | **Per-case activity counts are materialized** | Postgres cannot estimate selectivity of JSONB-attribute filters; for narrow filters it chose a plan that re-aggregated all events per case (a 2-second query took ~5 minutes). An indexed materialized view, refreshed by the loader, makes every plan cheap. |
 | D35 | **Evaluation in an isolated database, scored against planted truth** | `python -m watchdog_backend.evaluation` reloads `<db>_eval` per generator seed and runs four suites (investigations, grounded Q&A, retrieval, what-if). Results are appended per run, merged across runs (later re-runs replace earlier results, which stay listed), and written to `docs/evaluation_report.md`. Rate-limited runs are reported separately from model failures; provider account ids are redacted. |
 | D36 | **JSON-schema structured output by default, wall-clock LLM deadlines** | Found by the evaluation: tool calling failed on two Groq models (JSON schema 3/3), and a slowly streaming server could stall a run for minutes. |
+| D37 | **Symmetric safeguards without re-judging the model's words** | Downgrades stop decoys; upgrades stop over-caution. Upgrades act only on code-worded hypotheses (coverage hypotheses, or a new "Evidence-confirmed" finding) whose evidence meets strict criteria, because flipping a verdict on a sentence the model wrote can assert something false. |
+| D38 | **Parallel hypothesis assessment** | Hypotheses are independent; judged concurrently (`LLM_PARALLEL_CALLS`). Small gain on a single local GPU (Ollama serialises), real gain on cloud providers. |
 
 ## 4. Product shape
 
@@ -270,7 +272,7 @@ Closed loop on the dev data: delegation and Team B retraining were executed in M
 | `groq:qwen/qwen3.8-27b` | 9/9 | 97% | 0 | 97% |
 | `groq:openai/gpt-oss-120b` | 6/9 | 79% | 0 | 73% |
 
-No model accepted a decoy in any run. Every miss was over-caution (a supported cause left inconclusive or wrongly refuted), which the overrides do not yet catch because they only downgrade verdicts. Unverified numbers in summaries: 0 across all completed runs. Pending: re-run the cloud models' broker question (predates a what-if fix) and the five quota-refused runs.
+No model accepted a decoy in any run. Every miss was over-caution (a supported cause left inconclusive or wrongly refuted); D37 now addresses it with code-worded upgrades. Unverified numbers in summaries: 0 across all completed runs. Pending: re-run the cloud models' broker question (predates a what-if fix) and the five quota-refused runs.
 
 ## 10. Open questions
 

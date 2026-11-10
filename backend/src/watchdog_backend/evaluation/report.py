@@ -152,18 +152,30 @@ def build_report(dirs: list[Path]) -> str:
         w("### Safeguards at work\n")
         w("How often the deterministic safeguards changed the outcome:\n")
         w(
-            "| Model | Hypotheses added by coverage rule | Verdicts overridden (confounder / small sample) "
+            "| Model | Hypotheses added by coverage rule | Downgraded (model said supported; confounded or small sample) "
+            "| Upgraded (code-worded hypothesis, strong evidence) | Findings confirmed by evidence rule "
             "| Runs whose summary needed a rewrite | Negative-value actions recommended |"
         )
-        w("|---|---|---|---|---|")
+        w("|---|---|---|---|---|---|---|")
         for m in models:
             ok = [r for r in inv if r["model"] == m and r["ok"]]
             rewrites = sum(any("rewritten" in n for n in r["notes"]) for r in ok)
+            ovs = [o for r in ok for o in r["overrides"]]
+            confirmed = sum(o["statement"].startswith("Evidence-confirmed") for o in ovs)
+            down = sum(o["model_said"] == "supported" for o in ovs)
+            up = len(ovs) - down - confirmed
             w(
-                f"| `{m}` | {sum(r['coverage_added'] for r in ok)} | {sum(len(r['overrides']) for r in ok)} "
+                f"| `{m}` | {sum(r['coverage_added'] for r in ok)} | {down} | {up} | {confirmed} "
                 f"| {rewrites}/{len(ok)} | {sum(bool(r['negative_value_recommended']) for r in ok)}/{len(ok)} |"
             )
         w("")
+        w(
+            "Downgrades stop decoys (a model calling a confounded effect a cause). Upgrades and "
+            "confirmed findings stop over-caution: the evidence rule only ever adds or upgrades "
+            "hypotheses worded by code from evidence that is significant, large enough, not a "
+            "small sample and not explained by any confounder; a sentence the model wrote is "
+            "never re-judged. Runs made before the upgrade rules existed (the first local and cloud runs) could only downgrade.\n"
+        )
 
     w(
         "*Negative-value actions recommended* counts runs that recommended an action whose "

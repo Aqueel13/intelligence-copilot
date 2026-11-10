@@ -308,3 +308,152 @@ def test_real_errors_are_not_retried() -> None:
     with pytest.raises(_ProviderError):
         llm.structured(model, llm.RouteOut, "s", "u")
     assert model.methods == ["json_schema"]
+
+
+# --- upgrade rules: a timid model still surfaces strong, unconfounded causes ---------------
+
+
+def _timid(verdict: str = "inconclusive") -> ScriptedModel:
+    return ScriptedModel(
+        {
+            llm.RouteOut: [llm.RouteOut(route="investigation")],
+            llm.PlanOut: [PLAN],
+            llm.VerdictOut: [
+                llm.VerdictOut(verdict=verdict, confidence="low", reasoning="Unsure.")
+            ],
+            llm.RecommendOut: [llm.RecommendOut(selections=[])],
+        },
+        [SUMMARY_GOOD],
+    )
+
+
+@pytest.fixture(scope="module")
+def timid_result(db_engine, pack, kb):
+    return _run(db_engine, pack, _timid())
+
+
+def test_timid_model_still_finds_every_planted_cause(timid_result) -> None:
+    s = score(timid_result["hypotheses"])
+    assert all(s.found.values()), s.found
+    assert not any(s.decoys_accepted.values())
+
+
+def test_rule_a_upgrades_only_code_worded_hypotheses(timid_result) -> None:
+    upgraded = [
+        h
+        for h in timid_result["hypotheses"]
+        if h.model_verdict == "inconclusive"
+        and h.verdict == "supported"
+        and not h.statement.startswith("Evidence-confirmed")
+    ]
+    assert upgraded and all(h.auto for h in upgraded)
+    planner = [h for h in timid_result["hypotheses"] if not h.auto]
+    assert all(h.verdict == "inconclusive" for h in planner)  # the model's own words untouched
+
+
+def test_rule_b_adds_separate_findings_never_the_decoy(timid_result) -> None:
+    confirmed = [
+        h for h in timid_result["hypotheses"] if h.statement.startswith("Evidence-confirmed")
+    ]
+    assert confirmed
+    assert all(h.verdict == "supported" and h.override for h in confirmed)
+    keys = {(e.check.type, getattr(e.check, "value", None)) for h in confirmed for e in h.evidence}
+    assert ("segment", "health") not in keys  # confounded: never confirmed
+    assert ("activity_wait", None) in keys or any(
+        getattr(e.check, "activity", None) == "Senior Approval"
+        for h in confirmed
+        for e in h.evidence
+    )
+
+
+def test_refuting_model_cannot_suppress_strong_evidence(db_engine, pack, kb) -> None:
+    s = score(_run(db_engine, pack, _timid("refuted"))["hypotheses"])
+    assert s.found["RC1"] and s.found["RC3"]
+    assert not s.decoys_accepted["DC1"]
+
+
+def test_assessment_runs_in_parallel(db_engine, pack, kb, monkeypatch) -> None:
+    import time as _time
+
+    from watchdog_backend.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "llm_parallel_calls", 4)
+
+    class Slow(ScriptedModel):
+        def with_structured_output(self, schema, method=None):
+            inner = super().with_structured_output(schema, method)
+            if schema is not llm.VerdictOut:
+                return inner
+
+            class R:
+                def invoke(self, messages):
+                    _time.sleep(0.6)
+                    return inner.invoke(messages)
+
+            return R()
+
+    model = Slow(
+        {
+            llm.RouteOut: [llm.RouteOut(route="investigation")],
+            llm.PlanOut: [PLAN],
+            llm.VerdictOut: [ALWAYS_SUPPORTED],
+            llm.RecommendOut: [PICKS],
+        },
+        [SUMMARY_GOOD],
+    )
+    state = _run(db_engine, pack, model)
+    assess = next(s for s in state["steps"] if s.node == "assess")
+    n = sum(1 for h in state["hypotheses"] if not h.statement.startswith("Evidence-confirmed"))
+    assert n >= 4
+    assert assess.ms / 1000 < 0.6 * n * 0.6  # well under the sequential time
+
+
+def _signal(id_, kind, strength, **data):
+    from watchdog_backend.investigation.scan import Signal
+
+    return Signal(id=id_, kind=kind, statement=id_, strength=strength, data=data)
+
+
+def test_coverage_skips_trends_instead_of_stopping() -> None:
+    from watchdog_backend.investigation.graph import apply_coverage
+
+    signals = [
+        _signal("trend:breach", "trend", 0.9),
+        _signal(
+            "seg:rework:team:Team B",
+            "segment",
+            0.5,
+            dimension="team",
+            value="Team B",
+            outcome="rework",
+            low_sample=False,
+        ),
+    ]
+    hypotheses, added = apply_coverage([], signals)
+    assert added == 1 and hypotheses[0].signal_ids == ["seg:rework:team:Team B"]
+
+
+def test_coverage_never_adds_weak_or_small_sample_signals() -> None:
+    from watchdog_backend.investigation.graph import apply_coverage
+
+    signals = [
+        _signal(
+            "seg:breached:region:Pune",
+            "segment",
+            0.5,
+            dimension="region",
+            value="Pune",
+            outcome="breached",
+            low_sample=True,
+        ),
+        _signal(
+            "seg:doc_requested:amount_band:> ₹5L",
+            "segment",
+            0.05,
+            dimension="amount_band",
+            value="> ₹5L",
+            outcome="doc_requested",
+            low_sample=False,
+        ),
+    ]
+    assert apply_coverage([], signals) == ([], 0)

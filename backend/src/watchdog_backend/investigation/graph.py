@@ -12,6 +12,7 @@ Rule overrides keep the LLM honest: a segment effect explained by a confounder c
 
 import time
 from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, TypedDict
 
@@ -22,6 +23,7 @@ from sqlalchemy import Connection
 
 from watchdog_backend.analytics.metrics import MetricQuery, MetricQueryError, MetricsEngine
 from watchdog_backend.analytics.process import ProcessAnalyzer, ProcessQuery
+from watchdog_backend.config import get_settings
 from watchdog_backend.investigation import llm
 from watchdog_backend.investigation.actions import (
     ActionImpact,
@@ -39,6 +41,8 @@ from watchdog_backend.investigation.evidence import (
     WeekdayCheck,
     describe_check,
     run_check,
+    strong_support,
+    target_key,
 )
 from watchdog_backend.investigation.policy_refs import PolicyClause, resolve
 from watchdog_backend.investigation.scan import Overview, Signal, scan, segment_signals
@@ -49,7 +53,7 @@ from watchdog_backend.knowledge.retrieval import Retriever
 
 DIMENSIONS = ["line_of_business", "channel", "region", "team", "amount_band"]
 MAX_SIGNALS_FOR_PLANNER = 12
-MAX_HYPOTHESES = 7
+MAX_HYPOTHESES = 9  # planner proposes ≤ 6; coverage may add strong signals up to this
 COVERAGE_MIN_STRENGTH = 0.08  # only strong signals are auto-added if the planner skips them
 _CHECK = TypeAdapter(Check)
 
@@ -187,6 +191,36 @@ def _signal_checks(s: Signal) -> list[Check]:
     else:
         check = WeekdayCheck(weekday=d["weekday"])
     return [check, PolicyCheck(query=s.statement[:200])]
+
+
+def apply_coverage(
+    hypotheses: list[Hypothesis], signals: list[Signal]
+) -> tuple[list[Hypothesis], int]:
+    """Coverage rule: a strong, significant signal no hypothesis tests gets its own
+    (code-worded) hypothesis, so the planner can never silently drop a strong pattern.
+    Trends are context, not testable causes, and are skipped (not a reason to stop)."""
+    hypotheses = list(hypotheses)
+    added = 0
+    for sig in signals:
+        if len(hypotheses) >= MAX_HYPOTHESES:
+            break
+        if sig.kind == "trend":
+            continue
+        low_sample = sig.kind == "segment" and sig.data.get("low_sample")
+        weak = sig.strength < COVERAGE_MIN_STRENGTH
+        if low_sample or weak or any(_covers(h, sig) for h in hypotheses):
+            continue
+        hypotheses.append(
+            Hypothesis(
+                id=f"H{len(hypotheses) + 1}",
+                statement=f"{sig.statement} This contributes to SLA breaches.",
+                signal_ids=[sig.id],
+                checks=_signal_checks(sig),
+                auto=True,
+            )
+        )
+        added += 1
+    return hypotheses, added
 
 
 def _facts(state: InvestigationState) -> str:
@@ -348,26 +382,7 @@ def build_graph(deps: Deps):
                 )
             )
 
-        # Coverage rule: a significant signal no hypothesis tests gets its own hypothesis,
-        # so a strong pattern can never be silently dropped by the planner.
-        added = 0
-        for sig in state["signals"]:
-            if len(hypotheses) >= MAX_HYPOTHESES or sig.kind == "trend":
-                break
-            low_sample = sig.kind == "segment" and sig.data.get("low_sample")
-            weak = sig.strength < COVERAGE_MIN_STRENGTH
-            if low_sample or weak or any(_covers(h, sig) for h in hypotheses):
-                continue
-            hypotheses.append(
-                Hypothesis(
-                    id=f"H{len(hypotheses) + 1}",
-                    statement=f"{sig.statement} This contributes to SLA breaches.",
-                    signal_ids=[sig.id],
-                    checks=_signal_checks(sig),
-                    auto=True,
-                )
-            )
-            added += 1
+        hypotheses, added = apply_coverage(hypotheses, state["signals"])
         notes = [n for n in (failure, f"{added} added by coverage rule" if added else None) if n]
         return {"hypotheses": hypotheses, **({"_note": "; ".join(notes)} if notes else {})}
 
@@ -389,49 +404,101 @@ def build_graph(deps: Deps):
             hypotheses.append(h.model_copy(update={"evidence": evidence}))
         return {"hypotheses": hypotheses}
 
-    def assess(state: InvestigationState) -> dict:
+    def assess_one(h: Hypothesis) -> Hypothesis:
         model, _ = deps.model("assessor")
-        assessed = []
-        for h in state["hypotheses"]:
-            evidence = "\n".join(
-                f"- {describe_check(e.check)}: {e.summary[:700]}" for e in h.evidence
+        evidence = "\n".join(f"- {describe_check(e.check)}: {e.summary[:700]}" for e in h.evidence)
+        try:
+            out = llm.structured(
+                model,
+                llm.VerdictOut,
+                llm.ASSESSOR_SYSTEM,
+                f"Hypothesis: {h.statement}\n\nEvidence:\n{evidence}",
             )
-            try:
-                out = llm.structured(
-                    model,
-                    llm.VerdictOut,
-                    llm.ASSESSOR_SYSTEM,
-                    f"Hypothesis: {h.statement}\n\nEvidence:\n{evidence}",
-                )
-                verdict, confidence = out.verdict, out.confidence
-                reasoning = _tidy_reasoning(out.reasoning)
-            except ValueError as exc:
-                verdict, confidence, reasoning = "inconclusive", "low", f"Assessment failed: {exc}"
-            update = {"verdict": verdict, "confidence": confidence, "reasoning": reasoning}
+            verdict, confidence = out.verdict, out.confidence
+            reasoning = _tidy_reasoning(out.reasoning)
+        except ValueError as exc:
+            verdict, confidence, reasoning = "inconclusive", "low", f"Assessment failed: {exc}"
+        update: dict[str, Any] = {
+            "verdict": verdict,
+            "confidence": confidence,
+            "reasoning": reasoning,
+        }
 
-            # Rule overrides (deterministic): confounding and small samples.
-            segs = [e for e in h.evidence if e.ok and isinstance(e.check, SegmentCheck)]
-            confounded = [e for e in segs if e.explained_by]
-            if verdict == "supported" and confounded:
-                e = confounded[0]
+        # Downgrade rules: confounding and small samples.
+        segs = [e for e in h.evidence if e.ok and isinstance(e.check, SegmentCheck)]
+        confounded = [e for e in segs if e.explained_by]
+        if verdict == "supported" and confounded:
+            e = confounded[0]
+            update |= {
+                "model_verdict": verdict,
+                "verdict": "refuted",
+                "override": f"The {describe_check(e.check).lower()} effect is explained by "
+                f"{', '.join(e.explained_by)} (confounder check).",
+            }
+        elif (
+            verdict == "supported"
+            and segs
+            and all(e.data.get("low_sample") and not e.data.get("significant") for e in segs)
+        ):
+            update |= {
+                "model_verdict": verdict,
+                "verdict": "inconclusive",
+                "override": "Only small, non-significant samples support it.",
+            }
+        # Upgrade rule A: a coverage hypothesis is worded by code from its own evidence, so if
+        # that evidence meets the strict support criteria the verdict can be corrected safely.
+        elif verdict != "supported" and h.auto and not confounded:
+            reasons = [r for e in h.evidence if (r := strong_support(e))]
+            if reasons:
                 update |= {
                     "model_verdict": verdict,
-                    "verdict": "refuted",
-                    "override": f"The {describe_check(e.check).lower()} effect is explained by "
-                    f"{', '.join(e.explained_by)} (confounder check).",
+                    "verdict": "supported",
+                    "confidence": "high",
+                    "override": f"Evidence meets the support criteria: {reasons[0]}.",
                 }
-            elif (
-                verdict == "supported"
-                and segs
-                and all(e.data.get("low_sample") and not e.data.get("significant") for e in segs)
-            ):
-                update |= {
-                    "model_verdict": verdict,
-                    "verdict": "inconclusive",
-                    "override": "Only small, non-significant samples support it.",
-                }
-            assessed.append(h.model_copy(update=update))
-        return {"hypotheses": assessed}
+        return h.model_copy(update=update)
+
+    def assess(state: InvestigationState) -> dict:
+        hypotheses = state["hypotheses"]
+        # Hypotheses are independent: judge them concurrently (order is preserved).
+        workers = max(1, min(get_settings().llm_parallel_calls, len(hypotheses)))
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="assess") as pool:
+            assessed = list(pool.map(assess_one, hypotheses))
+
+        # Upgrade rule B: never re-judge a sentence the model wrote. If strong evidence sits in
+        # a hypothesis the model did not support, and no supported hypothesis covers the same
+        # thing, add a separate finding worded by code from that evidence.
+        covered = {
+            target_key(e.check) for h in assessed if h.verdict == "supported" for e in h.evidence
+        }
+        added = []
+        for h in assessed:
+            if h.verdict == "supported":
+                continue
+            for e in h.evidence:
+                key, reason = target_key(e.check), strong_support(e)
+                if key is None or reason is None or key in covered:
+                    continue
+                covered.add(key)
+                first = e.summary.split(". ")[0].rstrip(".")
+                added.append(
+                    Hypothesis(
+                        id=f"H{len(assessed) + len(added) + 1}",
+                        statement=f"Evidence-confirmed: {first}. This contributes to SLA breaches.",
+                        auto=True,
+                        signal_ids=[],
+                        checks=[e.check],
+                        evidence=[e],
+                        verdict="supported",
+                        confidence="high",
+                        reasoning=f"Confirmed by the evidence rule: {reason}.",
+                        model_verdict=h.verdict,
+                        override=f"Found in {h.id}, which the model judged {h.verdict}; the "
+                        "evidence meets the support criteria on its own.",
+                    )
+                )
+        note = f"{len(added)} finding(s) confirmed by the evidence rule" if added else None
+        return {"hypotheses": assessed + added, **({"_note": note} if note else {})}
 
     def recommend(state: InvestigationState) -> dict:
         frames, _ = frames_and_activities(state)
