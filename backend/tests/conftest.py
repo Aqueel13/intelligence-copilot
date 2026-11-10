@@ -67,4 +67,5 @@ def db_engine(dataset):
     _migrate()
     engine = get_engine()
     load_dataset(engine, dataset)
-    return engine
+    yield engine
+    engine.dispose()

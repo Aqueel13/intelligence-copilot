@@ -39,6 +39,7 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 | D14 | **Response cache + recorded demo runs** | Investigations are cached by input hash and showcase runs can be replayed, so the public demo survives free-tier limits. |
 | D15 | **GitHub OAuth** for the public demo | Free; the audience (recruiters, engineers) mostly has GitHub accounts. |
 | D16 | **Currency INR; Indian insurance context** | Realistic and matches the author's domain experience. Amounts in ₹, lakh/crore formatting in the UI. |
+| D17 | **Process mining in SQL, not PM4Py** | PM4Py is AGPL v3, which would force the whole app (including the hosted demo) to be AGPL. The process map, variants and bottlenecks are computed exactly in SQL, keeping the license choice open. |
 
 ## 4. Product shape
 
@@ -137,7 +138,7 @@ FastAPI ── LangGraph investigation graph
         │        ┌────────────┼──────────────┐
         │        ▼            ▼              ▼
         │   Metrics layer  Process mining  Retrieval (hybrid + rerank)
-        │   (domain pack)  (PM4Py)         (pgvector + full-text)
+        │   (domain pack)  (SQL-native)    (pgvector + full-text)
         │
         ├── Watch: scheduled KPI monitors → alerts
         ├── Governance: approvals, permissions, audit
@@ -156,7 +157,7 @@ PostgreSQL 17 + pgvector    Operations MCP server (separate process) → mock en
 |------|--------|
 | Backend | Python 3.12, FastAPI, Pydantic v2, SQLAlchemy 2 + Alembic, `uv` |
 | Orchestration | LangGraph |
-| Process mining | PM4Py |
+| Process mining | SQL-native (directly-follows graph, variants, waiting times). PM4Py is AGPL v3, so it is not a dependency; it may return later as an optional extra for conformance checking. |
 | Database | PostgreSQL 17 + pgvector |
 | Frontend | React, Vite, TypeScript, Tailwind, Recharts |
 | MCP | Official MCP Python SDK |

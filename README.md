@@ -4,7 +4,7 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 
 **Watch → Investigate → Recommend → Act**
 
-> Status: **M1 — data and metrics.** See [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md) for scope, decisions and milestones.
+> Status: **M2 — process mining and dashboard.** See [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md) for scope, decisions and milestones.
 
 ## Design principles
 
@@ -15,7 +15,7 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 
 ## Stack
 
-FastAPI · LangGraph · PostgreSQL 17 + pgvector · PM4Py · React + Vite + TypeScript + Tailwind · MCP · Docker Compose
+FastAPI · LangGraph · PostgreSQL 17 + pgvector · SQL-native process mining · React + Vite + TypeScript + Tailwind · MCP · Docker Compose
 
 ## Run locally
 
@@ -29,7 +29,7 @@ make data                     # generate 5,000 synthetic claims (seed 42) and lo
 
 | What | URL |
 |------|-----|
-| App | http://localhost:5173 |
+| App: Overview and Process screens | http://localhost:5173 |
 | API docs | http://localhost:8000/api/docs |
 | Health | http://localhost:8000/api/health |
 | Metric catalogue | http://localhost:8000/api/metrics |
@@ -40,7 +40,8 @@ Other commands: `make test`, `make lint`, `make check` (everything CI runs), `ma
 
 ```
 backend/       FastAPI app (src/watchdog_backend), Alembic migrations, tests
-  analytics/   metrics engine: domain-pack metrics → safe, parameterised SQL
+  analytics/   metrics engine (domain-pack metrics → safe, parameterised SQL) and
+               SQL-native process mining (process map, variants, bottlenecks)
   generator/   synthetic data with planted root causes, decoys and ground truth
 domain_packs/  per-industry configuration (process, dimensions, rules, metrics)
 frontend/      React + Vite + Tailwind UI

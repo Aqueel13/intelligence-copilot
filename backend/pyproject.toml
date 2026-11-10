@@ -38,8 +38,8 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
-# Domain labels intentionally use the en dash and rupee sign (e.g. "₹2L–₹5L").
-allowed-confusables = ["–"]
+# User-facing text intentionally uses the en dash and multiplication sign (e.g. "₹2L–₹5L", "2×").
+allowed-confusables = ["–", "×"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

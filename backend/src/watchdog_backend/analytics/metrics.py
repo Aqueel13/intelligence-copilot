@@ -168,23 +168,25 @@ class MetricsEngine:
             )
         return spec
 
-    def build(self, q: MetricQuery) -> tuple[str, dict[str, object]]:
-        metric = self.pack.metrics.get(q.metric)
-        if metric is None:
-            raise MetricQueryError(
-                f"Unknown metric {q.metric!r}. Allowed: {', '.join(self.pack.metrics)}"
-            )
-        if len(q.group_by) > MAX_GROUP_BY:
-            raise MetricQueryError(f"At most {MAX_GROUP_BY} group_by dimensions are allowed")
-        if len(set(q.group_by)) != len(q.group_by):
-            raise MetricQueryError("group_by contains duplicates")
-        if q.period_from and q.period_to and q.period_from > q.period_to:
+    def where_clause(
+        self,
+        dimension_base: str,
+        filters: dict[str, list[str]],
+        period_from: date | None,
+        period_to: date | None,
+    ) -> tuple[list[str], dict[str, object]]:
+        """Validated WHERE fragments and bound params for filters and an FNOL date period.
+
+        `dimension_base` decides which dimensions may be filtered on. Process mining passes
+        "cases" so a filter can never cut a trace in half (e.g. by filtering on activity).
+        """
+        if period_from and period_to and period_from > period_to:
             raise MetricQueryError("period_from is after period_to")
 
         params: dict[str, object] = {"domain": self.pack.domain}
         where = ["domain = :domain"]
-        for i, (name, values) in enumerate(sorted(q.filters.items())):
-            spec = self._dimension(name, metric.base, "filter")
+        for i, (name, values) in enumerate(sorted(filters.items())):
+            spec = self._dimension(name, dimension_base, "filter")
             if not values:
                 raise MetricQueryError(f"Filter {name!r} needs at least one value")
             for v in values:
@@ -198,13 +200,26 @@ class MetricsEngine:
             where.append(f"{spec.expression} = ANY(:f{i})")
 
         local_opened = f"(opened_at AT TIME ZONE {_literal(self.tz)})::date"
-        if q.period_from:
-            params["period_from"] = q.period_from
+        if period_from:
+            params["period_from"] = period_from
             where.append(f"{local_opened} >= :period_from")
-        if q.period_to:
-            params["period_to"] = q.period_to
+        if period_to:
+            params["period_to"] = period_to
             where.append(f"{local_opened} <= :period_to")
+        return where, params
 
+    def build(self, q: MetricQuery) -> tuple[str, dict[str, object]]:
+        metric = self.pack.metrics.get(q.metric)
+        if metric is None:
+            raise MetricQueryError(
+                f"Unknown metric {q.metric!r}. Allowed: {', '.join(self.pack.metrics)}"
+            )
+        if len(q.group_by) > MAX_GROUP_BY:
+            raise MetricQueryError(f"At most {MAX_GROUP_BY} group_by dimensions are allowed")
+        if len(set(q.group_by)) != len(q.group_by):
+            raise MetricQueryError("group_by contains duplicates")
+
+        where, params = self.where_clause(metric.base, q.filters, q.period_from, q.period_to)
         groups = [self._dimension(g, metric.base, "group_by") for g in q.group_by]
         select = [f"{g.expression} AS g{i}" for i, g in enumerate(groups)]
         select += [f"({metric.expression})::float8 AS value", f"{metric.sample} AS n"]
