@@ -6,9 +6,14 @@ drift, **recommends** fixes backed by evidence and ROI, and **acts** only with h
 **Watch → Investigate → Recommend → Act**, on two processes with one engine: insurance claims
 and procure-to-pay.
 
+**Live demo: [intelligence-watchdog.duckdns.org](https://intelligence-watchdog.duckdns.org)**.
+No sign-in needed to look around: every screen is readable, and the recorded showcase
+investigations replay step by step. Running new investigations needs an account (they spend a
+free-tier model quota).
+
 > **Read first:** the [case study](docs/CASE_STUDY.md) (what and why, results, what broke) ·
 > the [evaluation report](docs/evaluation_report.md) (every number, every failure) ·
-> the [project brief](docs/PROJECT_BRIEF.md) (decisions D1–D47, scope, milestones).
+> the [project brief](docs/PROJECT_BRIEF.md) (decisions D1–D62, scope, milestones).
 
 ![Watch: procure-to-pay monitors raised from policy thresholds](docs/images/watch-p2p.png)
 
@@ -135,8 +140,8 @@ runs), `make eval-retrieval`, `make psql`, `make logs`, `make down`. The `watche
 evaluates every pack's monitors hourly (`WATCH_INTERVAL_SECONDS`).
 
 Demo accounts (one per governance role in each pack, e.g. `a.rao@demo.watchdog`, plus a
-read-only `guest@demo.watchdog`) use `DEMO_PASSWORD`. Every `/api` route except health and
-sign-in needs a session.
+read-only `guest@demo.watchdog`) use `DEMO_PASSWORD`. Visitors who are not signed in can read
+every screen and replay showcase runs (D58); running anything needs a session.
 
 The LLM defaults to a local model through [Ollama](https://ollama.com)
 (`ollama pull qwen2.5:7b`). Set `LLM_DEFAULT_MODEL` / `LLM_MODELS` in `.env` to use Groq or
@@ -146,6 +151,9 @@ Gemini instead.
 
 One server with Docker Compose, Caddy in front for HTTPS: `docker-compose.prod.yml`, the
 `make prod-*` targets and the step-by-step runbook in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+The live demo runs on Oracle Cloud's always-free 1 GB VM with swap; the images are built
+elsewhere and shipped over SSH (`deploy/ship-images.sh`), and models come from Groq's free
+tier.
 
 ## Connect an MCP client
 
