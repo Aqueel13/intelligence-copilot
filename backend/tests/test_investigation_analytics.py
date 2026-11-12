@@ -235,3 +235,45 @@ def test_a_real_cause_survives_the_stricter_tests(frames) -> None:
         assert not stratified_difference(
             df, broker, "y", control, "b", alpha=alpha
         ).explained_by_control
+
+
+# --- annualising: whole window, a season, or a change still running -------------------------
+
+MONTHS = [f"2025-{m:02d}" for m in range(4, 13)] + [f"2026-{m:02d}" for m in range(1, 10)]
+
+
+def _series(active: dict[str, float]) -> pd.Series:
+    return pd.Series(active, dtype=float)
+
+
+def test_annual_basis_whole_window_for_a_steady_effect() -> None:
+    from watchdog_backend.investigation.actions import annual_basis
+
+    b = annual_basis(_series({m: 20 for m in MONTHS}), MONTHS, 18)
+    assert b.kind == "whole_window" and len(b.months) == 18
+
+
+def test_annual_basis_one_year_for_a_season_seen_before() -> None:
+    from watchdog_backend.investigation.actions import annual_basis
+
+    monsoon = {m: (40 if m[5:] in ("07", "08", "09") else 1) for m in MONTHS}
+    b = annual_basis(_series(monsoon), MONTHS, 18)
+    assert b.kind == "trailing_year" and b.months == MONTHS[-12:]
+
+
+def test_annual_basis_run_rate_for_a_recent_change() -> None:
+    from watchdog_backend.investigation.actions import annual_basis
+
+    weekly_runs = {m: (60 if m >= "2026-07" else 2) for m in MONTHS}
+    b = annual_basis(_series(weekly_runs), MONTHS, 18)
+    assert b.kind == "since_onset" and b.months == ["2026-07", "2026-08", "2026-09"]
+    assert "2026-07" in b.note
+
+
+def test_recent_change_is_valued_at_its_run_rate(frames) -> None:
+    """The senior queue (since April 2026) is valued at its current rate, not averaged over
+    the twelve months before it existed."""
+    cat = get_catalogue()
+    i = evaluate_action(frames, cat.actions["delegate_mid_value_approvals"], cat.economics)
+    assert "2026-04" in i.annual_basis
+    assert i.annual_breaches_avoided > 1.5 * i.breaches_avoided * 12 / frames.months

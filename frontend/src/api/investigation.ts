@@ -71,6 +71,7 @@ export interface ActionImpact {
   cost_basis: string
   assumptions: Record<string, number>
   method: string
+  annual_basis?: string // which months the annual figures come from (whole window, a season, a recent change)
 }
 
 export interface PolicyClause {

@@ -24,7 +24,7 @@ from watchdog_backend.knowledge.cache import corpus_version, normalise
 from watchdog_backend.observability.recorder import record
 
 # Bump when a code change alters what an investigation produces for the same inputs.
-ENGINE_VERSION = 1
+ENGINE_VERSION = 2  # 2: D54-D55 rules and the annualisation basis (D57)
 
 
 def data_version(conn: Connection, domain: str) -> str:

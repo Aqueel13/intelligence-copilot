@@ -6,6 +6,7 @@ removing hours does not re-run the working calendar (e.g. a saved Friday afterno
 as saved hours, not as a skipped weekend). That limitation is stated with every result.
 """
 
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Literal
 
@@ -135,6 +136,7 @@ class ActionImpact(BaseModel):
     annual_net_inr: float
     cost_basis: str
     assumptions: dict[str, float]
+    annual_basis: str = ""  # which months the annual figures are scaled from, and why
     method: str = METHOD_NOTE
 
 
@@ -209,6 +211,59 @@ def removed_hours(
     return cut.groupby(sel["case_id"]).sum(), 1.0
 
 
+ACTIVE_SHARE = 0.25  # a month counts as affected when it avoids ≥ this share of the peak month
+
+
+@dataclass(frozen=True)
+class AnnualBasis:
+    months: list[str]  # the months the annual figures are scaled from
+    kind: str  # whole_window | trailing_year | since_onset
+    note: str
+
+
+def annual_basis(per_month: pd.Series, all_months: list[str], whole_months: float) -> AnnualBasis:
+    """Which months to annualise an action's effect from.
+
+    Spreading the period's total over the whole window is right for a problem that runs
+    through it, and for a seasonal one seen over a full year; it understates a problem that
+    began recently and is still running (three weeks of a new problem averaged over 18 months
+    looks six times smaller than it is). So: find the run of consecutive affected months at
+    the end of the window. If it covers the window → the whole window. If the same calendar
+    months a year earlier were affected too → a season → the latest 12 months (one cycle).
+    Otherwise → a change that began at the start of that run → its current run-rate.
+    """
+    whole = AnnualBasis(all_months, "whole_window", f"{whole_months:.0f} months of data annualised")
+    counts = per_month.reindex(all_months, fill_value=0.0)
+    peak = float(counts.max()) if len(counts) else 0.0
+    if peak <= 0 or len(all_months) < 2:
+        return whole
+    active = counts >= ACTIVE_SHARE * peak
+    run: list[str] = []
+    for month in reversed(all_months):
+        if not active.loc[month]:
+            break
+        run.insert(0, month)
+    if not run or len(run) == len(all_months):
+        return whole
+
+    def year_before(m: str) -> str:
+        return f"{int(m[:4]) - 1}{m[4:]}"
+
+    earlier = [year_before(m) for m in run if year_before(m) in active.index]
+    if earlier and any(active.loc[m] for m in earlier):
+        last12 = all_months[-12:]
+        return AnnualBasis(
+            last12,
+            "trailing_year",
+            f"seen a year earlier too: annualised from the latest {len(last12)} months",
+        )
+    return AnnualBasis(
+        run,
+        "since_onset",
+        f"began in {run[0]}: annualised from the {len(run)} months since (current run-rate)",
+    )
+
+
 def evaluate_action(
     frames: Frames, action: Action, economics: Economics, population: Frames | None = None
 ) -> ActionImpact:
@@ -220,7 +275,20 @@ def evaluate_action(
     affected = int((hours > 0).sum())
     avoided = float(fixed.sum()) * fraction
     n = len(cases) or 1
-    annualise = 12 / frames.months
+
+    # Annualise from the right months (see annual_basis): whole window, a season, or a
+    # change still running.
+    month = cases["month"]
+    all_months = sorted(month.dropna().unique())
+    basis = annual_basis(fixed.groupby(month).sum().astype(float), all_months, frames.months)
+    if basis.kind == "whole_window":
+        annualise = 12 / frames.months
+        avoided_basis, affected_basis = avoided, affected * fraction
+    else:
+        in_basis = month.isin(basis.months)
+        annualise = 12 / len(basis.months)
+        avoided_basis = float((fixed & in_basis).sum()) * fraction
+        affected_basis = float(((hours > 0) & in_basis).sum()) * fraction
 
     rates = economics.rates
     c = action.annual_cost
@@ -228,9 +296,9 @@ def evaluate_action(
     if c.fixed_hours and c.rate:
         cost += c.fixed_hours * rates[c.rate]
     if c.per_affected_claim_hours and c.rate:
-        cost += c.per_affected_claim_hours * affected * fraction * annualise * rates[c.rate]
+        cost += c.per_affected_claim_hours * affected_basis * annualise * rates[c.rate]
 
-    benefit = avoided * annualise * economics.cost_per_breach_inr
+    benefit = avoided_basis * annualise * economics.cost_per_breach_inr
     return ActionImpact(
         action_id=action.id,
         title=action.title,
@@ -240,7 +308,7 @@ def evaluate_action(
         breaches_avoided=avoided,
         breach_rate_now=float(breached.mean()) if len(cases) else 0.0,
         breach_rate_after=float((breached.sum() - avoided) / n),
-        annual_breaches_avoided=avoided * annualise,
+        annual_breaches_avoided=avoided_basis * annualise,
         annual_benefit_inr=benefit,
         annual_cost_inr=cost,
         annual_net_inr=benefit - cost,
@@ -249,5 +317,7 @@ def evaluate_action(
             "cost_per_breach_inr": economics.cost_per_breach_inr,
             "months_of_data": round(frames.months, 1),
             "fraction_of_loops_removed": round(fraction, 3),
+            "annualised_from_months": float(len(basis.months)),
         },
+        annual_basis=basis.note,
     )

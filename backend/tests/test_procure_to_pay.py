@@ -386,3 +386,12 @@ def test_governance_is_per_pack(client) -> None:
     roles = client.get("/api/auth/roles").json()["business_roles"]
     assert "Treasury Head" in roles[P2P] and "Head of Claims" not in roles[P2P]
     assert "Head of Claims" in roles["insurance_claims"]
+
+
+def test_restoring_the_payment_run_is_valued_at_its_current_rate(p2p_ctx) -> None:
+    """The weekly runs began in July 2026 (3 of 18 months): averaged over the window, their
+    remedy looked not cost-effective; at the current run-rate it pays."""
+    with use_domain(P2P):
+        cat = get_catalogue()
+        i = evaluate_action(p2p_ctx.frames, cat.actions["restore_twice_weekly_runs"], cat.economics)
+    assert "2026-07" in i.annual_basis and i.annual_net_inr > 0

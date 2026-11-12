@@ -496,7 +496,7 @@ function Recommendations({ recs, hypotheses }: { recs: Recommendation[]; hypothe
       )}
       {first && (
         <p className="mt-3 border-t border-hairline pt-3 text-[11px] text-ink-muted">
-          Assumptions: cost per SLA breach ₹{formatCount(first.assumptions.cost_per_breach_inr)}; {first.assumptions.months_of_data} months of data annualised. {first.method}
+          Assumptions: cost per SLA breach ₹{formatCount(first.assumptions.cost_per_breach_inr)}; {first.assumptions.months_of_data} months of data, each action annualised from the months it applies to (the whole window, the latest year for a pattern seen a year earlier, or the months since a recent change began). {first.method}
         </p>
       )}
     </Card>
@@ -557,7 +557,7 @@ function RecCard({ r, hypotheses }: { r: Recommendation; hypotheses: Hypothesis[
         </div>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Figure label="Breaches avoided" value={formatCount(Math.round(i.annual_breaches_avoided))} note={`a year (${formatCount(Math.round(i.breaches_avoided))} in period)`} />
+        <Figure label="Breaches avoided" value={formatCount(Math.round(i.annual_breaches_avoided))} note={`a year (${formatCount(Math.round(i.breaches_avoided))} in period)${i.annual_basis ? `; ${i.annual_basis}` : ''}`} />
         <Figure label="Breach rate" value={`${formatPercent(i.breach_rate_now)} → ${formatPercent(i.breach_rate_after)}`} />
         <Figure label="Net value / year" value={lakh(i.annual_net_inr)} note={`${lakh(i.annual_benefit_inr)} benefit − ${lakh(i.annual_cost_inr)} cost`} />
         <Figure label={`${L.Many} affected`} value={formatCount(Math.round(i.affected_claims))} note={i.cost_basis} />
