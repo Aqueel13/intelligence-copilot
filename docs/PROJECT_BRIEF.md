@@ -1,7 +1,7 @@
 # Intelligence WatchDog — Project Brief
 
 > Working document. Records the decisions made so far and the agreed scope.
-> Last updated: 2026-11-10 (M8: second domain pack).
+> Last updated: 2026-11-12 (M8: investigation cache, showcase runs, rate limits).
 
 ## 1. One-liner
 
@@ -36,7 +36,7 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 | D11 | **Local first** (Docker Compose); GCP later | ₹0 infrastructure spend until there is something worth deploying. |
 | D12 | **Zero spend, including the LLM.** Default chat model on a **free API tier (Groq)**; **Gemini free tier** as the comparison provider; **Ollama** as the offline fallback | Free tiers are rate-limited (roughly 1,000 requests/day per model on Groq; verify limits on official pages). Prompts may be used for training, which is acceptable because all data is synthetic. |
 | D13 | **Embeddings run locally** (sentence-transformers / Ollama embedding model) | Free, no rate limits, works on CPU; no third-party dependency for retrieval. |
-| D14 | **Response cache + recorded demo runs** | Investigations are cached by input hash and showcase runs can be replayed, so the public demo survives free-tier limits. |
+| D14 | **Response cache + recorded demo runs** | Investigations are cached by input hash and showcase runs can be replayed, so the public demo survives free-tier limits. Built in M8, see D48. |
 | D15 | **GitHub OAuth** for the public demo | Free; the audience (recruiters, engineers) mostly has GitHub accounts. |
 | D16 | **Currency INR; Indian insurance context** | Realistic and matches the author's domain experience. Amounts in ₹, lakh/crore formatting in the UI. |
 | D17 | **Process mining in SQL, not PM4Py** | PM4Py is AGPL v3, which would force the whole app (including the hosted demo) to be AGPL. The process map, variants and bottlenecks are computed exactly in SQL, keeping the license choice open. |
@@ -70,6 +70,8 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 | D45 | **Built-in observability** | Every LLM call (role, model, tier, tokens, latency, status, investigation, user) and API request is written to Postgres by a background writer, never on the request path, kept 30 days. An Observability page shows percentiles, errors, cache hits, the Groq free-tier quota per model and per-investigation traces. It found two bugs on its first day (parallel assessment lost its context; cache hits were never recorded). |
 | D46 | **Answer cache: exact or near-identical, same numbers, same corpus** | Reuse an answer when the normalised question matches, or embedding similarity ≥ 0.97 AND the questions mention the same numbers (₹3 lakh and ₹30 lakh embed almost identically). Keyed by a hash of the pack's document versions and the retrieval settings, so any document change invalidates it. Evaluation bypasses the cache. |
 | D47 | **A light model tier for simple requests** | Question routing and short single-document policy lookups go to `LLM_LIGHT_MODEL` when set; reasoning, comparison and multi-document questions stay on the standard model. The rule is explainable and its reason is shown and recorded. On one small local GPU a second local model mostly adds swap time; the tier pays off on quota-limited cloud models. |
+| D48 | **Investigations replay from a recording: cache hits and showcase runs** | Each run stores the event stream it produced. An identical request (normalised question, scope, models, and hashes of the case data, documents and pack YAML) replays the latest run in seconds with no model call; "Run it fresh" forces a new one. Admins mark good runs as showcase; anyone, viewers included, can replay them at a watchable pace. Runs from before the recording existed can be read but not replayed. The evaluation calls the graph directly and never uses the cache. |
+| D49 | **Rate limits only on what spends tokens, counted in Postgres** | Per person per hour and for everyone per day (the free tier's daily token cap is shared by every visitor), sized for Groq's 200k tokens/day/model: 4 and 12 investigations, 20 and 80 policy questions by default. Cache hits and replays are free, so limits never block the demo path. Admins are exempt; while an admin acts as someone, the admin's own limits apply. Counts live in `identity.usage_events`, so they survive restarts and hold with several workers. A limited request gets HTTP 429 with Retry-After and a plain-language reason. |
 
 ## 4. Product shape
 
@@ -314,8 +316,16 @@ Procure-to-Pay on the same engine, local `qwen2.5:7b`, seeds 42, 7, 1234:
 | 9/9 completed | 100% (every cause in every run) | 0 / 9 runs | 17/18 causes | 100% (model's own citations 86%) | 100% (all methods) |
 
 The 7B model called a confounded segment "supported" 25 times; the confounder rule refuted all
-of them. Insurance results unchanged (all 165 earlier tests pass; 26 new P2P tests). Remaining
-M8: public deployment (hosting, GitHub OAuth, cached showcase runs) and the video.
+of them. Insurance results unchanged (all 165 earlier tests pass; 26 new P2P tests).
+
+### M8 platform work (2026-11-11 to 2026-11-12)
+
+Accounts and two-layer RBAC (D43, D44), built-in observability (D45), the policy-answer cache
+(D46), a light model tier (D47), the investigation cache with showcase replay (D48) and rate
+limits (D49). 230 backend tests pass.
+
+Remaining M8: public deployment (hosting, HTTPS, GitHub sign-in) and the video. Everything the
+deployment needs from the app itself (showcase runs, limits, secure cookies) is in place.
 
 ## 10. Open questions
 

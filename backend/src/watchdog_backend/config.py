@@ -77,6 +77,15 @@ class Settings(BaseSettings):
     admin_password: str | None = None
     demo_password: str | None = None
 
+    # Rate limits on requests that spend model tokens (0 = no limit). Cache hits and showcase
+    # replays are free; admins are exempt. "per_day" is for everyone together: free tiers cap
+    # tokens per model per day, shared by every visitor of a public demo. Sized for Groq's free
+    # 200k tokens/day/model: an investigation uses ~15k tokens, a policy answer ~2k.
+    rate_limit_investigations_per_user_hour: int = 4
+    rate_limit_investigations_per_day: int = 12
+    rate_limit_questions_per_user_hour: int = 20
+    rate_limit_questions_per_day: int = 80
+
     # Comma-separated list of allowed browser origins.
     cors_origins: str = "http://localhost:5173"
 

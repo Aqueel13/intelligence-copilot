@@ -10,7 +10,7 @@ from watchdog_backend.db import get_engine
 from watchdog_backend.domain.pack import available_domains, current_domain, get_pack
 from watchdog_backend.governance import audit
 from watchdog_backend.governance.config import get_governance
-from watchdog_backend.identity import rbac
+from watchdog_backend.identity import limits, rbac
 from watchdog_backend.identity import service as ids
 from watchdog_backend.identity.deps import principal, require
 from watchdog_backend.identity.middleware import COOKIE
@@ -235,3 +235,28 @@ def update_user(
 @router.get("/packs")
 def packs() -> list[dict[str, str]]:
     return [{"domain": d, "display_name": get_pack(d).display_name} for d in available_domains()]
+
+
+class UsageWindow(BaseModel):
+    scope: str  # user (rolling hour) | everyone (rolling day)
+    limit: int  # 0 = no limit
+    used: int
+    resets_in: int
+
+
+class Usage(BaseModel):
+    exempt: bool
+    limits: dict[str, list[UsageWindow]]  # per action: investigate, ask
+
+
+@router.get("/usage", response_model=Usage)
+def usage(who: Annotated[Principal, Depends(principal)]) -> Usage:
+    """How much of the rate limits the signed-in person has used (see identity/limits.py)."""
+    with get_engine().connect() as conn:
+        return Usage(
+            exempt=limits.exempt(who),
+            limits={
+                a: [UsageWindow(**vars(w)) for w in limits.status(conn, who, a)]
+                for a in limits.ACTIONS
+            },
+        )

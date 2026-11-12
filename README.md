@@ -43,6 +43,12 @@ Around the loop, the platform an enterprise would ask for:
 - **Cost control.** Repeated or near-identical policy questions are answered from a cache
   (invalidated when any document changes; never reused across different amounts). Simple
   requests can go to a cheaper model tier (`LLM_LIGHT_MODEL`), with the reason shown.
+- **Replay instead of re-running.** Every investigation records its steps. An identical request
+  on the same data, documents and models replays the recorded run in seconds with no model
+  call. Admins pick showcase runs that anyone, read-only visitors included, can watch step by
+  step.
+- **Rate limits** on requests that spend tokens only: per person per hour, and for everyone per
+  day, sized for a free model tier (`RATE_LIMIT_*` settings). Cache hits and replays are free.
 - **Model comparison.** A page built from the saved evaluation runs, so every new run shows up.
 
 ## Results in one table

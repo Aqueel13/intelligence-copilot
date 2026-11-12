@@ -1,5 +1,7 @@
 """Policy Q&A as the app serves it: cache first, then the light or standard model."""
 
+from collections.abc import Callable
+
 from sqlalchemy import Connection
 
 from watchdog_backend.config import get_settings
@@ -20,7 +22,10 @@ def ask(
     method: Method = "hybrid",
     filters: SearchFilters | None = None,
     use_cache: bool = True,
+    before_model: Callable[[], None] | None = None,
 ) -> Answer:
+    """`before_model` runs only when the answer is not cached, before any model call (the API
+    uses it for rate limits, so cached answers stay free)."""
     domain = current_domain()
     embedder = get_embedder()
     key = cache.params_key(k=k, method=method, filters=filters.model_dump() if filters else None)
@@ -28,6 +33,8 @@ def ask(
     if use_cache and (hit := cache.lookup(conn, domain, question, key, embedder)):
         return hit[0]
 
+    if before_model is not None:
+        before_model()
     model, spec = get_chat_model("answer")
     light = get_light_model("answer")
     with usage_scope() as usage:

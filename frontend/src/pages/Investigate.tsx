@@ -1,13 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import type { Scope } from '../api/client'
+import { authApi, type Usage } from '../api/auth'
 import {
   actionsApi,
   investigationsApi,
   watchApi,
+  replayInvestigation,
   streamInvestigation,
   type Hypothesis,
+  type StartInfo,
+  type StreamEvent,
   type InvestigationState,
   type Recommendation,
   type Verdict,
@@ -36,6 +40,8 @@ export default function Investigate() {
   const [params, setParams] = useSearchParams()
   const { can } = useAuth()
   const viewer = !can('investigate')
+  const curator = can('manage_showcase')
+  const [replay, setReplay] = useState<StartInfo | null>(null)
   const [question, setQuestion] = useState('')
   const [state, setState] = useState<InvestigationState>({})
   const [status, setStatus] = useState<RunStatus>('idle')
@@ -56,23 +62,24 @@ export default function Investigate() {
   const shownQuestion = status === 'idle' && record.data ? record.data.question : question
   const shownModels = status === 'idle' && record.data ? record.data.models : models
 
-  const run = async (q: string) => {
-    const text = q.trim()
-    if (text.length < 5) return
+  const usage = useQuery({ queryKey: ['usage'], queryFn: authApi.usage, enabled: !viewer })
+
+  type Source = (onEvent: (e: StreamEvent) => void, signal: AbortSignal) => Promise<void>
+  const consume = async (text: string, source: Source) => {
     abort.current?.abort()
     abort.current = new AbortController()
     setQuestion(text)
     setState({})
     setError(null)
+    setReplay(null)
     setStatus('running')
     setStartedAt(Date.now())
     try {
-      await streamInvestigation(
-        text,
-        scope,
+      await source(
         (e) => {
           if (e.event === 'start') {
             setModels(e.data.models)
+            if (e.data.replay) setReplay(e.data)
             const alertId = params.get('alert')
             if (alertId) watchApi.link(alertId, e.data.id).catch(() => {})
             setParams((p) => {
@@ -101,8 +108,46 @@ export default function Investigate() {
       }
     } finally {
       qc.invalidateQueries({ queryKey: ['investigations'] })
+      qc.invalidateQueries({ queryKey: ['usage'] })
     }
   }
+
+  // A new question, or an identical earlier one replayed from the cache (unless `fresh`).
+  const run = (q: string, fresh = false) => {
+    const text = q.trim()
+    if (text.length < 5) return
+    return consume(text, (on, signal) => streamInvestigation(text, scope, on, signal, fresh))
+  }
+  const replayRun = (id: string, q: string) => consume(q, (on, signal) => replayInvestigation(id, on, signal))
+
+  const showcase = useMutation({
+    mutationFn: ({ id, on }: { id: string; on: boolean }) => investigationsApi.setShowcase(id, on),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['investigation', openId] })
+      qc.invalidateQueries({ queryKey: ['investigations'] })
+      qc.invalidateQueries({ queryKey: ['showcase'] })
+    },
+  })
+  const open = status === 'idle' ? record.data : undefined
+  const recordActions = open && (
+    <div className="flex flex-wrap gap-1.5">
+      {open.replayable && (
+        <button onClick={() => replayRun(open.investigation_id, open.question)} className="rounded-md border border-hairline px-2 py-1 text-xs text-ink-2 hover:bg-ghost">
+          ▶ Replay
+        </button>
+      )}
+      {curator && open.replayable && (
+        <button
+          onClick={() => showcase.mutate({ id: open.investigation_id, on: !open.showcase })}
+          disabled={showcase.isPending}
+          title="Showcase runs can be replayed by everyone, including read-only visitors"
+          className="rounded-md border border-hairline px-2 py-1 text-xs text-ink-2 hover:bg-ghost disabled:opacity-50"
+        >
+          {open.showcase ? '★ In showcase' : '☆ Add to showcase'}
+        </button>
+      )}
+    </div>
+  )
 
   // Arriving from a Watch alert: run its question once, scoped by the URL's filters.
   const started = useRef(false)
@@ -162,11 +207,18 @@ export default function Investigate() {
             Scope: <span className="text-ink-2">{scopeLabel}</span> (set with the filters above) ·{' '}
             {domain.data?.display_name}
           </p>
+          {viewer && <p className="mt-1 text-xs text-ink-muted">Your role can watch the showcase runs (right) and open past investigations.</p>}
+          {usage.data && <UsageNote usage={usage.data} />}
         </Card>
 
         {error && (
           <Card>
             <ErrorNote error={error} />
+          </Card>
+        )}
+        {showcase.error && (
+          <Card>
+            <ErrorNote error={showcase.error} />
           </Card>
         )}
 
@@ -177,6 +229,9 @@ export default function Investigate() {
             models={shownModels}
             question={shownQuestion}
             startedAt={startedAt}
+            replay={status === 'idle' ? null : replay}
+            onFresh={!viewer && replay?.cached && status !== 'running' ? () => run(shownQuestion, true) : undefined}
+            actions={recordActions}
           />
         )}
 
@@ -189,7 +244,10 @@ export default function Investigate() {
         {shown.signals && <Signals state={shown} />}
       </div>
 
-      <History activeId={openId} onOpen={() => setStatus('idle')} />
+      <div className="grid content-start gap-4">
+        <Showcase curator={curator} running={status === 'running'} onReplay={replayRun} />
+        <History activeId={openId} onOpen={() => setStatus('idle')} />
+      </div>
     </div>
   )
 }
@@ -208,12 +266,18 @@ function Progress({
   models,
   question,
   startedAt,
+  replay,
+  onFresh,
+  actions,
 }: {
   state: InvestigationState
   status: RunStatus
   models: Record<string, string>
   question: string
   startedAt: number | null
+  replay: StartInfo | null
+  onFresh?: () => void
+  actions?: ReactNode
 }) {
   const done = new Map((state.steps ?? []).map((s) => [s.node, s]))
   const route = state.route
@@ -221,7 +285,19 @@ function Progress({
   const nextIdx = visible.findIndex((s) => !done.has(s.node))
   const total = (state.steps ?? []).reduce((a, s) => a + s.ms, 0)
   return (
-    <Card title={question} subtitle={status === 'running' ? 'Investigating…' : status === 'done' ? `Completed in ${(total / 1000).toFixed(0)} s` : undefined}>
+    <Card
+      title={question}
+      subtitle={
+        replay
+          ? `${status === 'running' ? 'Replaying' : 'Replayed'} a run recorded ${replay.recorded_at ? new Date(replay.recorded_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'earlier'} that took ${(total / 1000).toFixed(0)} s · no model calls`
+          : status === 'running'
+            ? 'Investigating…'
+            : status === 'done'
+              ? `Completed in ${(total / 1000).toFixed(0)} s`
+              : undefined
+      }
+      actions={actions}
+    >
       <ol className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
         {visible.map((s, i) => {
           const d = done.get(s.node)
@@ -243,7 +319,18 @@ function Progress({
       {Object.keys(models).length > 0 && (
         <p className="mt-3 text-[11px] text-ink-muted">
           Models: {[...new Set(Object.values(models))].join(', ')}
-          {status === 'running' && startedAt && ' · a local model takes about a minute'}
+          {status === 'running' && startedAt && !replay && ' · a local model takes about a minute'}
+        </p>
+      )}
+      {replay?.cached && (
+        <p className="mt-2 text-xs text-ink-2">
+          The same question, scope, models, data and documents were investigated before, so the recorded run was replayed instead of
+          spending tokens again.{' '}
+          {onFresh && (
+            <button onClick={onFresh} className="font-semibold text-series-1 hover:underline">
+              Run it fresh
+            </button>
+          )}
         </p>
       )}
     </Card>
@@ -592,7 +679,10 @@ function History({ activeId, onOpen }: { activeId: string | null; onOpen: () => 
               }}
               className={`w-full rounded-md px-2 py-1.5 text-left text-xs hover:bg-ghost ${activeId === r.investigation_id ? 'bg-ghost' : ''}`}
             >
-              <div className="line-clamp-2 text-ink">{r.question}</div>
+              <div className="line-clamp-2 text-ink">
+                {r.showcase && <span aria-label="Showcase run" className="mr-1 text-series-1">★</span>}
+                {r.question}
+              </div>
               <div className="mt-0.5 text-[11px] text-ink-muted">
                 {r.status === 'completed' ? (r.route === 'investigation' ? `${r.supported} supported` : r.route) : r.status} ·{' '}
                 {r.duration_ms ? `${Math.round(r.duration_ms / 1000)} s · ` : ''}
@@ -603,5 +693,54 @@ function History({ activeId, onOpen }: { activeId: string | null; onOpen: () => 
         ))}
       </ul>
     </Card>
+  )
+}
+
+function Showcase({ curator, running, onReplay }: { curator: boolean; running: boolean; onReplay: (id: string, q: string) => void }) {
+  const runs = useQuery({ queryKey: ['showcase'], queryFn: investigationsApi.showcase })
+  if (!runs.data?.length && !curator) return null
+  return (
+    <Card title="Showcase runs" subtitle="Recorded investigations, replayed step by step without calling a model.">
+      {runs.error && <ErrorNote error={runs.error} />}
+      {runs.data?.length === 0 && (
+        <p className="text-xs text-ink-muted">None yet. Open a completed run and choose ☆ Add to showcase.</p>
+      )}
+      <ul className="grid gap-1">
+        {runs.data?.map((r) => (
+          <li key={r.investigation_id}>
+            <button
+              onClick={() => onReplay(r.investigation_id, r.question)}
+              disabled={running}
+              className="w-full rounded-md px-2 py-1.5 text-left text-xs hover:bg-ghost disabled:opacity-50"
+            >
+              <div className="text-ink">
+                <span aria-hidden className="mr-1 text-series-1">▶</span>
+                {r.question}
+              </div>
+              <div className="mt-0.5 text-[11px] text-ink-muted">
+                {r.route === 'investigation' ? `${r.supported} supported · ` : ''}
+                {r.duration_ms ? `took ${Math.round(r.duration_ms / 1000)} s · ` : ''}
+                {[...new Set(Object.values(r.models))].join(', ')}
+              </div>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  )
+}
+
+function UsageNote({ usage }: { usage: Usage }) {
+  if (usage.exempt) return null
+  const [mine, everyone] = usage.limits.investigate
+  const parts: string[] = []
+  if (mine?.limit) parts.push(`${Math.max(0, mine.limit - mine.used)} of ${mine.limit} new investigations left this hour`)
+  if (everyone?.limit && everyone.used >= everyone.limit * 0.8)
+    parts.push(`the demo's daily budget is ${everyone.used >= everyone.limit ? 'used up' : 'nearly used up'}`)
+  if (!parts.length) return null
+  return (
+    <p className="mt-1 text-xs text-ink-muted">
+      {parts.join(' · ')} · repeated questions and showcase replays are free
+    </p>
   )
 }

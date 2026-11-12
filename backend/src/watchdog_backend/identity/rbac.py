@@ -25,6 +25,7 @@ PERMISSIONS: dict[str, set[str]] = {
     "run_monitors": _WORK,
     "view_observability": _WORK,
     "manage_documents": {"admin"},
+    "manage_showcase": {"admin"},  # pick the runs visitors can replay
     "simulate_month": {"admin"},  # demo device: rewrites the data everyone sees
     "manage_users": {"admin"},
     "act_as": {"admin"},  # demo: act as another user (audited)
@@ -34,8 +35,8 @@ DESCRIPTIONS = {
     "viewer": "Read everything, ask policy questions. Cannot start investigations or act.",
     "analyst": "Investigate, propose, approve (with the right business role) and execute "
     "actions, run monitors, see observability.",
-    "admin": "Everything, plus manage users and documents, simulate a month, act as another "
-    "user for demos.",
+    "admin": "Everything, plus manage users, documents and showcase runs, simulate a month, act "
+    "as another user for demos. Not rate-limited.",
 }
 
 

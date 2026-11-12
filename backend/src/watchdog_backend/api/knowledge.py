@@ -8,7 +8,9 @@ from sqlalchemy.orm import Session
 
 from watchdog_backend.db import get_session
 from watchdog_backend.domain.pack import get_pack
-from watchdog_backend.identity.deps import require
+from watchdog_backend.identity import limits
+from watchdog_backend.identity.deps import principal, require
+from watchdog_backend.identity.service import Principal
 from watchdog_backend.knowledge import qa
 from watchdog_backend.knowledge.answer import Answer
 from watchdog_backend.knowledge.ingest import IngestResult, ingest_document
@@ -80,22 +82,36 @@ class AskRequest(BaseModel):
 
 
 @router.post("/ask", response_model=Answer)
-def ask(req: AskRequest, session: DbSession) -> Answer:
+def ask(
+    req: AskRequest, session: DbSession, who: Annotated[Principal, Depends(principal)]
+) -> Answer:
     try:
         get_chat_model("answer")
         get_light_model("answer")
     except LLMConfigError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    conn = session.connection()
+
+    def spend() -> None:  # only when the answer is not cached
+        limits.check(conn, who, "ask")
+        limits.charge(conn, who, "ask")
+        conn.commit()
+
     try:
         with traced(purpose="qa"):
             return qa.ask(
-                session.connection(),
+                conn,
                 req.question,
                 k=req.k,
                 method=req.method,
                 filters=req.filters,
                 use_cache=req.use_cache,
+                before_model=spend,
             )
+    except limits.RateLimited as exc:
+        raise HTTPException(
+            status_code=429, detail=str(exc), headers={"Retry-After": str(exc.retry_after)}
+        ) from exc
     except LLMCallError as exc:
         # 502: the upstream model provider failed, not this service.
         raise HTTPException(

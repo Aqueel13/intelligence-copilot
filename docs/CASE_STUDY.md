@@ -93,8 +93,11 @@ proved it, and showed where it wasn't yet true (section 6).
 platform role (viewer, analyst, admin) for what someone can do, and a business role per process
 for what they can approve. Observability records every LLM call and API request, with
 per-investigation traces and the free-tier quota per model. Repeated or near-identical policy
-questions are served from a cache that any document change invalidates. A cheaper model tier
-takes simple requests, with the routing reason shown. The observability page paid for itself
+questions are served from a cache that any document change invalidates, and an identical
+investigation replays its recorded run instead of calling a model again. Admins choose showcase
+runs that read-only visitors can watch, and rate limits apply only to requests that spend
+tokens, so a free model tier can carry a public demo. A cheaper model tier takes simple
+requests, with the routing reason shown. The observability page paid for itself
 on day one: it showed the parallel assessor's calls arriving without context, which turned
 out to be a real bug (and it had been quietly using the wrong pack's wording).
 
@@ -219,7 +222,7 @@ generator with a loader and spend its effort where it usually goes:
 - The what-if engine **understates** some effects (calendar, and mechanisms beyond waiting
   time).
 - Accounts are **local** (no single sign-on yet), and the app runs on a laptop: public
-  hosting, GitHub sign-in and rate limiting come with the deployment.
+  hosting and GitHub sign-in come with the deployment.
 
 ## Stack
 

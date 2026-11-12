@@ -24,6 +24,18 @@ export interface RoleInfo {
   business_roles: Record<string, string[]>
 }
 
+export interface UsageWindow {
+  scope: 'user' | 'everyone' // rolling hour per person | rolling day for everyone
+  limit: number // 0 = no limit
+  used: number
+  resets_in: number
+}
+
+export interface Usage {
+  exempt: boolean
+  limits: Record<'investigate' | 'ask', UsageWindow[]>
+}
+
 export class Unauthorized extends Error {}
 
 async function json<T>(res: Response): Promise<T> {
@@ -51,6 +63,7 @@ export const authApi = {
   actAs: (user_id: string | null) => send('/api/auth/act-as', 'POST', { user_id }).then((r) => json<Me>(r)),
   users: () => apiFetch('/api/auth/users').then((r) => json<UserInfo[]>(r)),
   roles: () => apiFetch('/api/auth/roles').then((r) => json<RoleInfo>(r)),
+  usage: () => apiFetch('/api/auth/usage').then((r) => json<Usage>(r)),
   packs: () => apiFetch('/api/auth/packs').then((r) => json<{ domain: string; display_name: string }[]>(r)),
   createUser: (b: { user_id: string; email: string; name: string; platform_role: string; password: string; pack_roles: Record<string, string> }) =>
     send('/api/auth/users', 'POST', b).then((r) => json<UserInfo>(r)),

@@ -125,6 +125,8 @@ export interface InvestigationSummary {
   duration_ms: number | null
   error: string | null
   supported: number
+  showcase: boolean
+  replayable: boolean // recorded step by step, so it can be played back
 }
 
 export interface InvestigationRecord {
@@ -137,27 +139,52 @@ export interface InvestigationRecord {
   error: string | null
   duration_ms: number | null
   created_at: string
+  showcase: boolean
+  replayable: boolean
+}
+
+export interface StartInfo {
+  id: string
+  models: Record<string, string>
+  replay?: boolean // played back from a recording: no model calls
+  cached?: boolean // …because an identical request was made before
+  recorded_at?: string
 }
 
 export type StreamEvent =
-  | { event: 'start'; data: { id: string; models: Record<string, string> } }
+  | { event: 'start'; data: StartInfo }
   | { event: 'step'; data: { node: string; update: InvestigationState } }
   | { event: 'done'; data: { id: string } }
   | { event: 'error'; data: { id?: string; message: string } }
 
-/** POST + read Server-Sent Events from the response body (EventSource only supports GET). */
-export async function streamInvestigation(
+/** Start an investigation (or get an identical earlier one replayed from the cache, unless
+ * `fresh`) and read its Server-Sent Events. */
+export function streamInvestigation(
   question: string,
   scope: Scope,
   onEvent: (e: StreamEvent) => void,
   signal?: AbortSignal,
+  fresh = false,
 ): Promise<void> {
-  const res = await apiFetch('/api/investigations/stream', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ question, scope }),
-    signal,
-  })
+  return readEvents(
+    apiFetch('/api/investigations/stream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question, scope, fresh }),
+      signal,
+    }),
+    onEvent,
+  )
+}
+
+/** Play a recorded run back at a watchable pace (no model calls; open to every role). */
+export function replayInvestigation(id: string, onEvent: (e: StreamEvent) => void, signal?: AbortSignal): Promise<void> {
+  return readEvents(apiFetch(`/api/investigations/${id}/replay`, { signal }), onEvent)
+}
+
+/** Read Server-Sent Events from a fetch response body (EventSource only supports GET). */
+async function readEvents(request: Promise<Response>, onEvent: (e: StreamEvent) => void): Promise<void> {
+  const res = await request
   if (!res.ok || !res.body) {
     const body = (await res.json().catch(() => ({}))) as { detail?: string }
     throw new Error(body.detail ?? `${res.status} ${res.statusText}`)
@@ -185,6 +212,22 @@ export const investigationsApi = {
     const res = await apiFetch('/api/investigations')
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
     return res.json() as Promise<InvestigationSummary[]>
+  },
+  showcase: async (): Promise<InvestigationSummary[]> => {
+    const res = await apiFetch('/api/investigations?showcase=true')
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+    return res.json() as Promise<InvestigationSummary[]>
+  },
+  setShowcase: async (id: string, showcase: boolean): Promise<void> => {
+    const res = await apiFetch(`/api/investigations/${id}/showcase`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ showcase }),
+    })
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { detail?: string }
+      throw new Error(body.detail ?? `${res.status} ${res.statusText}`)
+    }
   },
   get: async (id: string): Promise<InvestigationRecord> => {
     const res = await apiFetch(`/api/investigations/${id}`)
