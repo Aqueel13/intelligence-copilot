@@ -37,3 +37,6 @@ evaluation/results/smoke*/
 
 # Production database backups (deploy/backup.sh)
 backups/
+
+# /brag launch-video output (large binaries)
+brag-output/
