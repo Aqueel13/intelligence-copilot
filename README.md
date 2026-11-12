@@ -77,6 +77,7 @@ counterfactual per case). Full detail in the [evaluation report](docs/evaluation
 | Earlier six-month data | 3 cloud models + local, 36 runs (6 refused by free-tier limits): 100% recall in every completed run, 0 decoys | local 7B, 9 runs: 100% recall, 0 decoys |
 | Policy Q&A: answers citing a relevant passage | 95–100% by model | 100% |
 | What-if vs exact counterfactual (18-month data) | 0.55–0.97 of truth (understates) | 0.64–1.17 of truth |
+| Runs recommending an action that is not cost-effective (18-month data) | 0 of 15 | 0 of 12 |
 
 The 18-month data has five planted causes and three or four decoys per pack (`docs/PROJECT_BRIEF.md`
 §5, §5b); the cloud models have not been re-run on it yet (free-tier quotas).

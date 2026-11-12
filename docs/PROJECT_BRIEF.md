@@ -334,7 +334,7 @@ Closed loop on the dev data: delegation and Team B retraining were executed in M
 
 Cloud rows are the 2026-11-12 re-run under D37 (all 3 seeds × 3 questions). No model accepted a decoy in any run, and every completed run found every planted cause: the over-caution that cost the 120B model 21 points is gone. Unverified numbers in summaries: 0. Six runs were refused by Groq's free tier (one daily quota, five "request too large" on qwen3.8-27b's per-minute cap), reported separately, not as failures. These results are on the six-month datasets; for the 18-month data see below.
 
-### 18-month data, local model (2026-11-12)
+### 18-month data, local model (2026-11-12, re-run under D57)
 
 `ollama:qwen2.5:7b`, seeds 42, 7, 1234, every question (insurance 5, P2P 4, including the new monsoon, Kolkata and Sanand questions):
 
@@ -343,7 +343,7 @@ Cloud rows are the 2026-11-12 re-run under D37 (all 3 seeds × 3 questions). No 
 | Insurance | 15/15 | 100% | 0 / 9 runs | 95% / 89% | 0.97 | 0.55-0.97 |
 | Procure-to-pay | 12/12 | 100% | 0 / 12 runs | 100% / 100% | 1.00 | 0.64-1.17 |
 
-Four runs (three insurance, one P2P) first failed when the local Ollama server crashed under memory pressure (13 of 15 GB in use); they were re-run and are included. A first attempt at this evaluation, before D55, accepted the Pune decoy in seed 7; it was stopped and the engine fixed. These runs used the whole-window annualisation; it undervalued the remedy for a cause that began recently (restoring the payment run showed as not cost-effective in 10 of 12 P2P runs, 9 of 11 on the six-month data), fixed afterwards by D57. The paper-invoice levers overstate slightly (1.17): capping the capture wait also removes some of the normal queue.
+The whole evaluation was repeated after D57 (annualise from the months an effect applies to); these are the repeated results. Restoring the payment run is now valued correctly: P2P runs recommending an action that is not cost-effective fell from 10 of 12 to 0 of 12, and summaries needing a rewrite from 8 of 12 to 2 of 12. In insurance, none of the 15 runs now recommends a not-cost-effective action (the Saturday rota had been recommended as such in 2 runs of the root-cause question, which is why "remedy recommended" for RC4 fell from 2 of 3 to 0 of 3: the rota's what-if understates its benefit, 0.55 of truth, so it does not pay back). Still open: the monsoon survey panel is recommended in every monsoon-specific run but in none of the general root-cause runs. Unverified numbers in summaries: 2 in 15 insurance runs, 0 in P2P. Six runs failed when the local Ollama server crashed under memory pressure (the machine was also building images and running tests); they were re-run and are included, as were four in the first pass. A first attempt, before D55, accepted the Pune decoy in seed 7; it was stopped and the engine fixed. The paper-invoice levers overstate slightly (1.17): capping the capture wait also removes some of the normal queue.
 
 ### M8 results so far (2026-11-10): second domain pack
 

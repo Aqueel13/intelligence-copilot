@@ -1,6 +1,6 @@
 # Evaluation report
 
-Generated from 12 run(s) over 2 domain pack(s): `2026-11-10T14:43:04` (insurance_claims), `2026-11-10T14:23:19` (insurance_claims), `2026-11-10T15:54:20` (insurance_claims), `2026-11-10T19:27:50` (insurance_claims), `2026-11-10T20:28:49` (procure_to_pay), `2026-11-12T10:49:06` (insurance_claims), `2026-11-12T11:08:03` (insurance_claims), `2026-11-12T11:32:20` (insurance_claims), `2026-11-12T13:01:35` (insurance_claims), `2026-11-12T13:40:47` (insurance_claims), `2026-11-12T13:18:51` (procure_to_pay), `2026-11-12T13:45:42` (procure_to_pay). Models: `groq:openai/gpt-oss-120b`, `groq:openai/gpt-oss-20b`, `groq:qwen/qwen3.8-27b`, `ollama:qwen2.5:7b`.
+Generated from 16 run(s) over 2 domain pack(s): `2026-11-10T14:43:04` (insurance_claims), `2026-11-10T14:23:19` (insurance_claims), `2026-11-10T15:54:20` (insurance_claims), `2026-11-10T19:27:50` (insurance_claims), `2026-11-10T20:28:49` (procure_to_pay), `2026-11-12T10:49:06` (insurance_claims), `2026-11-12T11:08:03` (insurance_claims), `2026-11-12T11:32:20` (insurance_claims), `2026-11-12T13:01:35` (insurance_claims), `2026-11-12T13:40:47` (insurance_claims), `2026-11-12T15:01:44` (insurance_claims), `2026-11-12T15:41:55` (insurance_claims), `2026-11-12T13:18:51` (procure_to_pay), `2026-11-12T13:45:42` (procure_to_pay), `2026-11-12T15:20:06` (procure_to_pay), `2026-11-12T15:49:01` (procure_to_pay). Models: `groq:openai/gpt-oss-120b`, `groq:openai/gpt-oss-20b`, `groq:qwen/qwen3.8-27b`, `ollama:qwen2.5:7b`.
 
 All results are measured, not targets. Failed runs are reported, not dropped. Every investigation is scored against the generator's planted ground truth, declared per pack in `domain_packs/<pack>/evaluation/investigations.yaml`: a planted cause counts as found only if a hypothesis that targets it is *supported*; a decoy counts as accepted if a supported hypothesis rests only on it. Both packs run on the same engine code: only configuration and the synthetic-data generator differ.
 
@@ -19,7 +19,7 @@ Quality columns cover completed runs only. *Rate-limited* runs never reached the
 | `groq:openai/gpt-oss-120b` | 6 months (earlier datasets) | 9 | 9 | 0 | 0 | 100% | 9/9 | 0/6 runs | 31 | 0.00 | 105 s | 9.8 | 18,126 |
 | `groq:openai/gpt-oss-20b` | 6 months (earlier datasets) | 9 | 8 | 1 | 0 | 100% | 8/8 | 0/6 runs | 26 | 0.00 | 140 s | 10.5 | 23,104 |
 | `groq:qwen/qwen3.8-27b` | 6 months (earlier datasets) | 9 | 4 | 5 | 0 | 100% | 4/4 | 0/3 runs | 1 | 0.00 | 201 s | 12.5 | 14,369 |
-| `ollama:qwen2.5:7b` | 18 months, 18,000 cases | 15 | 15 | 0 | 0 | 100% | 15/15 | 0/9 runs | 29 | 0.00 | 78 s | 11.4 | 13,430 |
+| `ollama:qwen2.5:7b` | 18 months, 18,000 cases | 15 | 15 | 0 | 0 | 100% | 15/15 | 0/9 runs | 29 | 0.13 | 76 s | 11.2 | 12,727 |
 
 #### By question
 
@@ -32,13 +32,13 @@ Quality columns cover completed runs only. *Rate-limited* runs never reached the
 | `health_vs_motor` | `groq:openai/gpt-oss-120b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
 | `health_vs_motor` | `groq:openai/gpt-oss-20b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
 | `health_vs_motor` | `groq:qwen/qwen3.8-27b` | 7: error, 42: 100%, 1234: error | 0/1 | 1/1 |
-| `health_vs_motor` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
+| `health_vs_motor` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 2/3 |
 | `kolkata_region` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
 | `monsoon_motor` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
 | `sla_root_causes` | `groq:openai/gpt-oss-120b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 12/12 |
 | `sla_root_causes` | `groq:openai/gpt-oss-20b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 11/12 |
 | `sla_root_causes` | `groq:qwen/qwen3.8-27b` | 7: 100%, 42: 100%, 1234: error | 0/2 | 8/8 |
-| `sla_root_causes` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 11/15 |
+| `sla_root_causes` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 9/15 |
 
 #### Planted causes found (all questions that expect them)
 
@@ -58,7 +58,7 @@ How often the deterministic safeguards changed the outcome:
 | `groq:openai/gpt-oss-120b` | 34 | 6 | 0 | 25 | 0/9 | 9/9 |
 | `groq:openai/gpt-oss-20b` | 34 | 6 | 0 | 20 | 1/8 | 8/8 |
 | `groq:qwen/qwen3.8-27b` | 2 | 1 | 0 | 0 | 1/4 | 4/4 |
-| `ollama:qwen2.5:7b` | 41 | 14 | 0 | 15 | 7/15 | 7/15 |
+| `ollama:qwen2.5:7b` | 41 | 14 | 0 | 15 | 4/15 | 7/15 |
 
 Downgrades stop decoys (a model calling a confounded effect a cause). Upgrades and confirmed findings stop over-caution: the evidence rule only ever adds or upgrades hypotheses worded by code from evidence that is significant, large enough, not a small sample and not explained by any confounder; a sentence the model wrote is never re-judged. Runs made before the upgrade rules existed could only downgrade. *Negative-value actions recommended* counts runs that recommended an action whose estimated net value is negative; the recommender may do so only when no positive action addresses a supported cause, and the UI marks it "Not cost-effective".
 
@@ -114,7 +114,7 @@ Quality columns cover completed runs only. *Rate-limited* runs never reached the
 
 | Model | Data | Runs | Completed | Rate-limited | Other failures | Mean recall | All expected causes found | Decoys accepted | Overrides fired | Unverified numbers / run | Mean duration | LLM calls / run | Tokens / run |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `ollama:qwen2.5:7b` | 18 months, 18,000 cases | 12 | 12 | 0 | 0 | 100% | 12/12 | 0/12 runs | 52 | 0.25 | 103 s | 15.4 | 20,783 |
+| `ollama:qwen2.5:7b` | 18 months, 18,000 cases | 12 | 12 | 0 | 0 | 100% | 12/12 | 0/12 runs | 52 | 0.00 | 103 s | 14.9 | 18,752 |
 
 #### By question
 
@@ -137,7 +137,7 @@ How often the deterministic safeguards changed the outcome:
 
 | Model | Hypotheses added by coverage rule | Downgraded (model said supported; confounded or small sample) | Upgraded (code-worded hypothesis, strong evidence) | Findings confirmed by evidence rule | Runs whose summary needed a rewrite | Negative-value actions recommended |
 |---|---|---|---|---|---|---|
-| `ollama:qwen2.5:7b` | 73 | 48 | 0 | 4 | 8/12 | 10/12 |
+| `ollama:qwen2.5:7b` | 73 | 48 | 0 | 4 | 2/12 | 0/12 |
 
 Downgrades stop decoys (a model calling a confounded effect a cause). Upgrades and confirmed findings stop over-caution: the evidence rule only ever adds or upgrades hypotheses worded by code from evidence that is significant, large enough, not a small sample and not explained by any confounder; a sentence the model wrote is never re-judged. Runs made before the upgrade rules existed could only downgrade. *Negative-value actions recommended* counts runs that recommended an action whose estimated net value is negative; the recommender may do so only when no positive action addresses a supported cause, and the UI marks it "Not cost-effective".
 
@@ -150,7 +150,7 @@ None.
 
 | Model | Answerable questions | Answered (not refused) | Cited a relevant passage | Grounded after verification | Model's own citation accuracy | Unanswerable correctly declined | Errors | Mean generation |
 |---|---|---|---|---|---|---|---|---|
-| `ollama:qwen2.5:7b` | 34 | 100% | 100% | 100% | 79% | 5/5 | 0 | 1.4 s |
+| `ollama:qwen2.5:7b` | 34 | 100% | 100% | 100% | 79% | 5/5 | 0 | 1.6 s |
 
 *Model's own citation accuracy* = share of answer sentences whose citation the model got right before the verifier corrected anything (decision D20).
 
@@ -264,7 +264,7 @@ confounder checks showed the effect persisting, and left the correct claim-value
 "inconclusive" in one health-vs-motor run. Rules A and B now surface such causes as
 separate, code-worded findings; the model's own sentences are still never re-judged.
 
-61 earlier result(s) were re-run after a fix and replaced:
+94 earlier result(s) were re-run after a fix and replaced:
 
 | Pack | Model | Seed | Question | Earlier result |
 |---|---|---|---|---|
@@ -302,6 +302,11 @@ separate, code-worded findings; the model's own sentences are still never re-jud
 | insurance_claims | `ollama:qwen2.5:7b` | 7 | `sla_root_causes` | recall 100%, remedy recommended 4/4 |
 | insurance_claims | `ollama:qwen2.5:7b` | 7 | `health_vs_motor` | recall 100%, remedy recommended 1/1 |
 | insurance_claims | `ollama:qwen2.5:7b` | 7 | `broker_channel` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `ollama:qwen2.5:7b` | 7 | `sla_root_causes` | recall 100%, remedy recommended 3/5 |
+| insurance_claims | `ollama:qwen2.5:7b` | 7 | `health_vs_motor` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `ollama:qwen2.5:7b` | 7 | `broker_channel` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `ollama:qwen2.5:7b` | 7 | `monsoon_motor` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `ollama:qwen2.5:7b` | 7 | `kolkata_region` | recall 100%, remedy recommended 1/1 |
 | insurance_claims | `ollama:qwen2.5:7b` | 42 | `broker_channel` | recall 100%, remedy recommended 0/1 |
 | insurance_claims | `ollama:qwen2.5:7b` | 42 | `sla_root_causes` | recall 100%, remedy recommended 3/4 |
 | insurance_claims | `ollama:qwen2.5:7b` | 42 | `health_vs_motor` | recall 100%, remedy recommended 1/1 |
@@ -309,6 +314,11 @@ separate, code-worded findings; the model's own sentences are still never re-jud
 | insurance_claims | `ollama:qwen2.5:7b` | 42 | `sla_root_causes` | recall 100%, remedy recommended 3/4 |
 | insurance_claims | `ollama:qwen2.5:7b` | 42 | `health_vs_motor` | recall 100%, remedy recommended 1/1 |
 | insurance_claims | `ollama:qwen2.5:7b` | 42 | `broker_channel` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `ollama:qwen2.5:7b` | 42 | `sla_root_causes` | recall 100%, remedy recommended 4/5 |
+| insurance_claims | `ollama:qwen2.5:7b` | 42 | `health_vs_motor` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `ollama:qwen2.5:7b` | 42 | `broker_channel` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `ollama:qwen2.5:7b` | 42 | `monsoon_motor` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `ollama:qwen2.5:7b` | 42 | `kolkata_region` | recall 100%, remedy recommended 1/1 |
 | insurance_claims | `ollama:qwen2.5:7b` | 1234 | `broker_channel` | recall 100%, remedy recommended 0/1 |
 | insurance_claims | `ollama:qwen2.5:7b` | 1234 | `sla_root_causes` | recall 100%, remedy recommended 3/4 |
 | insurance_claims | `ollama:qwen2.5:7b` | 1234 | `health_vs_motor` | recall 100%, remedy recommended 1/1 |
@@ -319,16 +329,39 @@ separate, code-worded findings; the model's own sentences are still never re-jud
 | insurance_claims | `ollama:qwen2.5:7b` | 1234 | `broker_channel` | failed: RemoteProtocolError: Server disconnected without sending a response. |
 | insurance_claims | `ollama:qwen2.5:7b` | 1234 | `monsoon_motor` | failed: ConnectError: [Errno 111] Connection refused |
 | insurance_claims | `ollama:qwen2.5:7b` | 1234 | `kolkata_region` | failed: ConnectError: [Errno 111] Connection refused |
+| insurance_claims | `ollama:qwen2.5:7b` | 1234 | `sla_root_causes` | recall 100%, remedy recommended 4/5 |
+| insurance_claims | `ollama:qwen2.5:7b` | 1234 | `health_vs_motor` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `ollama:qwen2.5:7b` | 1234 | `broker_channel` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `ollama:qwen2.5:7b` | 1234 | `monsoon_motor` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `ollama:qwen2.5:7b` | 1234 | `kolkata_region` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `ollama:qwen2.5:7b` | 1234 | `sla_root_causes` | failed: TimeoutError: model did not finish within 180 s |
+| insurance_claims | `ollama:qwen2.5:7b` | 1234 | `health_vs_motor` | failed: RemoteProtocolError: Server disconnected without sending a response. |
+| insurance_claims | `ollama:qwen2.5:7b` | 1234 | `broker_channel` | failed: ConnectError: [Errno 111] Connection refused |
+| insurance_claims | `ollama:qwen2.5:7b` | 1234 | `monsoon_motor` | failed: ConnectError: [Errno 111] Connection refused |
+| insurance_claims | `ollama:qwen2.5:7b` | 1234 | `kolkata_region` | failed: ConnectError: [Errno 111] Connection refused |
 | procure_to_pay | `ollama:qwen2.5:7b` | 7 | `p2p_root_causes` | recall 100%, remedy recommended 4/4 |
 | procure_to_pay | `ollama:qwen2.5:7b` | 7 | `services_slow` | recall 100%, remedy recommended 1/1 |
 | procure_to_pay | `ollama:qwen2.5:7b` | 7 | `msme_late` | recall 100%, remedy recommended 1/1 |
+| procure_to_pay | `ollama:qwen2.5:7b` | 7 | `p2p_root_causes` | recall 100%, remedy recommended 5/5 |
+| procure_to_pay | `ollama:qwen2.5:7b` | 7 | `services_slow` | recall 100%, remedy recommended 1/1 |
+| procure_to_pay | `ollama:qwen2.5:7b` | 7 | `msme_late` | recall 100%, remedy recommended 1/1 |
+| procure_to_pay | `ollama:qwen2.5:7b` | 7 | `sanand_late` | recall 100%, remedy recommended 1/1 |
+| procure_to_pay | `ollama:qwen2.5:7b` | 7 | `sanand_late` | failed: RemoteProtocolError: Server disconnected without sending a response. |
 | procure_to_pay | `ollama:qwen2.5:7b` | 42 | `p2p_root_causes` | recall 100%, remedy recommended 4/4 |
 | procure_to_pay | `ollama:qwen2.5:7b` | 42 | `services_slow` | recall 100%, remedy recommended 1/1 |
 | procure_to_pay | `ollama:qwen2.5:7b` | 42 | `msme_late` | recall 100%, remedy recommended 1/1 |
+| procure_to_pay | `ollama:qwen2.5:7b` | 42 | `p2p_root_causes` | recall 100%, remedy recommended 4/5 |
+| procure_to_pay | `ollama:qwen2.5:7b` | 42 | `services_slow` | recall 100%, remedy recommended 1/1 |
+| procure_to_pay | `ollama:qwen2.5:7b` | 42 | `msme_late` | recall 100%, remedy recommended 1/1 |
+| procure_to_pay | `ollama:qwen2.5:7b` | 42 | `sanand_late` | recall 100%, remedy recommended 1/1 |
 | procure_to_pay | `ollama:qwen2.5:7b` | 1234 | `p2p_root_causes` | recall 100%, remedy recommended 3/4 |
 | procure_to_pay | `ollama:qwen2.5:7b` | 1234 | `services_slow` | recall 100%, remedy recommended 1/1 |
 | procure_to_pay | `ollama:qwen2.5:7b` | 1234 | `msme_late` | recall 100%, remedy recommended 1/1 |
 | procure_to_pay | `ollama:qwen2.5:7b` | 1234 | `sanand_late` | failed: RemoteProtocolError: peer closed connection without sending complete message bod |
+| procure_to_pay | `ollama:qwen2.5:7b` | 1234 | `p2p_root_causes` | recall 100%, remedy recommended 5/5 |
+| procure_to_pay | `ollama:qwen2.5:7b` | 1234 | `services_slow` | recall 100%, remedy recommended 1/1 |
+| procure_to_pay | `ollama:qwen2.5:7b` | 1234 | `msme_late` | recall 100%, remedy recommended 1/1 |
+| procure_to_pay | `ollama:qwen2.5:7b` | 1234 | `sanand_late` | recall 100%, remedy recommended 1/1 |
 
 ## Method and limitations
 
