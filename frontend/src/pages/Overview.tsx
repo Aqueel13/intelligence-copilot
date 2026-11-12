@@ -28,7 +28,8 @@ function OverviewBody({ scope, domain }: { scope: Scope; domain: DomainInfo }) {
   const p90 = useMetric(scope, 'p90_cycle_days')
   const activities = useScoped('activities', scope, () => api.activities(scope))
 
-  const fetching = [cases, breach, cycle, activities].some((q) => q.isFetching)
+  // Process analysis is far slower than the KPIs, so only its own tile waits on it.
+  const fetching = [cases, breach, cycle, p90].some((q) => q.isFetching)
   const firstError = [cases, breach, cycle].find((q) => q.error)?.error
   if (firstError) return <ErrorNote error={firstError} />
 
@@ -58,23 +59,28 @@ function OverviewBody({ scope, domain }: { scope: Scope; domain: DomainInfo }) {
             value={formatValue(single(cycle.data)?.value ?? null, 'days')}
             note={`90% finish within ${formatValue(single(p90.data)?.value ?? null, 'days')}`}
           />
-          <div className="rounded-xl border border-hairline bg-surface p-4">
-            <div className="text-xs text-ink-2">Bottlenecks</div>
-            <div className="mt-1 text-2xl font-semibold">{activities.data ? bottlenecks.length : '—'}</div>
-            <div className="mt-1 space-y-0.5">
-              {bottlenecks.map((b) => (
-                <div key={b.activity}>
-                  <StatusBadge status="critical" label={b.activity} />
-                  <span className="ml-1 text-xs text-ink-muted">
-                    waits {formatValue(b.mean_wait_hours, 'hours')} on average
-                  </span>
-                </div>
-              ))}
-              <Link to={{ pathname: '/process', search: location.search }} className="text-xs text-ink-2 underline underline-offset-2">
-                See the process
-              </Link>
+          <Refetching active={activities.isFetching}>
+            <div className="h-full rounded-xl border border-hairline bg-surface p-4">
+              <div className="text-xs text-ink-2">Bottlenecks</div>
+              <div className="mt-1 text-2xl font-semibold">{activities.data ? bottlenecks.length : '—'}</div>
+              {!activities.data && activities.isFetching && (
+                <div className="mt-1 text-xs text-ink-muted">Analysing the process…</div>
+              )}
+              <div className="mt-1 space-y-0.5">
+                {bottlenecks.map((b) => (
+                  <div key={b.activity}>
+                    <StatusBadge status="critical" label={b.activity} />
+                    <span className="ml-1 text-xs text-ink-muted">
+                      waits {formatValue(b.mean_wait_hours, 'hours')} on average
+                    </span>
+                  </div>
+                ))}
+                <Link to={{ pathname: '/process', search: location.search }} className="text-xs text-ink-2 underline underline-offset-2">
+                  See the process
+                </Link>
+              </div>
             </div>
-          </div>
+          </Refetching>
           {spotlight && <MetricTile scope={scope} tile={spotlight} />}
         </div>
 

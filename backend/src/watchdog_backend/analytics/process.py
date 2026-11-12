@@ -229,40 +229,45 @@ class ProcessAnalyzer:
 
     def activities(self, conn: Connection, q: ProcessQuery) -> ActivityAnalysis:
         where, params = self._scope(q)
+        # One pass per CTE, no per-activity subqueries: on a small server the correlated
+        # form took tens of seconds. `ev` keeps only the columns used, so sorts stay in memory.
         sql = f"""
             WITH ev AS (
-                SELECT * FROM operational.event_facts WHERE {where}
+                SELECT case_id, activity, wait_hours, work_hours
+                FROM operational.event_facts WHERE {where}
             ), case_flags AS (
                 SELECT case_id, closed_at > sla_due_at AS breached
                 FROM operational.cases WHERE case_id IN (SELECT case_id FROM ev)
-            ), per_case AS (
-                SELECT activity, case_id, count(*) AS n FROM ev GROUP BY 1, 2
+            ), per_activity AS (
+                SELECT pc.activity,
+                       avg((pc.n > 1)::int) AS repeat_rate,
+                       avg(cf.breached::int) AS breach_rate_with
+                FROM (SELECT activity, case_id, count(*) AS n FROM ev GROUP BY 1, 2) pc
+                LEFT JOIN case_flags cf USING (case_id)
+                GROUP BY pc.activity
             ), totals AS (
-                SELECT count(*) AS cases, avg(breached::int) AS breach_all,
-                       sum(breached::int) AS breached_all
+                SELECT count(*) AS total_cases, sum(breached::int) AS breached_all
                 FROM case_flags
+            ), stats AS (
+                SELECT
+                    activity,
+                    count(*) AS instances,
+                    count(DISTINCT case_id) AS cases,
+                    avg(wait_hours) AS mean_wait_hours,
+                    percentile_cont(0.5) WITHIN GROUP (ORDER BY wait_hours) AS median_wait_hours,
+                    percentile_cont(0.9) WITHIN GROUP (ORDER BY wait_hours) AS p90_wait_hours,
+                    sum(wait_hours) AS total_wait_hours,
+                    avg(work_hours) AS mean_work_hours,
+                    sum(work_hours) AS total_work_hours,
+                    percentile_cont(0.5) WITHIN GROUP (ORDER BY work_hours) AS median_work_hours,
+                    percentile_cont(0.9) WITHIN GROUP (ORDER BY work_hours) AS p90_work_hours
+                FROM ev
+                GROUP BY activity
             )
-            SELECT
-                ev.activity,
-                count(*) AS instances,
-                count(DISTINCT ev.case_id) AS cases,
-                avg(wait_hours) AS mean_wait_hours,
-                percentile_cont(0.5) WITHIN GROUP (ORDER BY wait_hours) AS median_wait_hours,
-                percentile_cont(0.9) WITHIN GROUP (ORDER BY wait_hours) AS p90_wait_hours,
-                sum(wait_hours) AS total_wait_hours,
-                avg(work_hours) AS mean_work_hours,
-                sum(work_hours) AS total_work_hours,
-                percentile_cont(0.5) WITHIN GROUP (ORDER BY work_hours) AS median_work_hours,
-                percentile_cont(0.9) WITHIN GROUP (ORDER BY work_hours) AS p90_work_hours,
-                (SELECT avg((pc.n > 1)::int) FROM per_case pc
-                  WHERE pc.activity = ev.activity) AS repeat_rate,
-                (SELECT avg(cf.breached::int) FROM case_flags cf
-                  WHERE cf.case_id IN (SELECT case_id FROM per_case pc
-                                       WHERE pc.activity = ev.activity)) AS breach_rate_with,
-                (SELECT cases FROM totals) AS total_cases,
-                (SELECT breached_all FROM totals) AS breached_all
-            FROM ev
-            GROUP BY ev.activity
+            SELECT stats.*, pa.repeat_rate, pa.breach_rate_with, t.total_cases, t.breached_all
+            FROM stats
+            JOIN per_activity pa USING (activity)
+            CROSS JOIN totals t
         """
         rows = list(conn.execute(text(sql), params).mappings())
         total_cases = int(rows[0]["total_cases"]) if rows else 0
