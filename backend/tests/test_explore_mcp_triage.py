@@ -45,7 +45,9 @@ def test_explore_reads_only_the_active_packs_views(db_engine, pack) -> None:
     assert "not a verified metric" in r.label
     with use_domain("procure_to_pay"):
         p2p = explore.run("select count(*) from cases").rows
-    assert p2p == [[_cases(db_engine, "procure_to_pay")]] != [[_cases(db_engine, pack.domain)]]
+    assert p2p == [[_cases(db_engine, "procure_to_pay")]]
+    with use_domain("procure_to_pay"):  # the P2P-only column proves which pack was read
+        assert explore.run("select count(distinct attributes->>'po_type') from cases").rows == [[3]]
     for forbidden in ("select * from identity.users", "select * from operational.cases"):
         with pytest.raises(explore.ExploreError, match="Permission denied"):
             explore.run(forbidden)

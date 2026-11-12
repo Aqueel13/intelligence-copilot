@@ -1,6 +1,6 @@
 # Evaluation report
 
-Generated from 5 run(s) over 2 domain pack(s): `2026-11-10T14:43:04` (insurance_claims), `2026-11-10T14:23:19` (insurance_claims), `2026-11-10T15:54:20` (insurance_claims), `2026-11-10T19:27:50` (insurance_claims), `2026-11-10T20:28:49` (procure_to_pay). Models: `groq:openai/gpt-oss-120b`, `groq:openai/gpt-oss-20b`, `groq:qwen/qwen3.8-27b`, `ollama:qwen2.5:7b`.
+Generated from 8 run(s) over 2 domain pack(s): `2026-11-10T14:43:04` (insurance_claims), `2026-11-10T14:23:19` (insurance_claims), `2026-11-10T15:54:20` (insurance_claims), `2026-11-10T19:27:50` (insurance_claims), `2026-11-10T20:28:49` (procure_to_pay), `2026-11-12T10:49:06` (insurance_claims), `2026-11-12T11:08:03` (insurance_claims), `2026-11-12T11:32:20` (insurance_claims). Models: `groq:openai/gpt-oss-120b`, `groq:openai/gpt-oss-20b`, `groq:qwen/qwen3.8-27b`, `ollama:qwen2.5:7b`.
 
 All results are measured, not targets. Failed runs are reported, not dropped. Every investigation is scored against the generator's planted ground truth, declared per pack in `domain_packs/<pack>/evaluation/investigations.yaml`: a planted cause counts as found only if a hypothesis that targets it is *supported*; a decoy counts as accepted if a supported hypothesis rests only on it. Both packs run on the same engine code: only configuration and the synthetic-data generator differ.
 
@@ -16,36 +16,36 @@ Quality columns cover completed runs only. *Rate-limited* runs never reached the
 
 | Model | Runs | Completed | Rate-limited | Other failures | Mean recall | All expected causes found | Decoys accepted | Overrides fired | Unverified numbers / run | Mean duration | LLM calls / run | Tokens / run |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `groq:openai/gpt-oss-120b` | 9 | 6 | 3 | 0 | 79% | 4/6 | 0/4 runs | 5 | 0.00 | 86 s | 10.0 | 16,340 |
-| `groq:openai/gpt-oss-20b` | 9 | 7 | 2 | 0 | 100% | 7/7 | 0/5 runs | 5 | 0.00 | 123 s | 10.9 | 19,349 |
-| `groq:qwen/qwen3.8-27b` | 9 | 9 | 0 | 0 | 97% | 8/9 | 0/6 runs | 1 | 0.00 | 189 s | 13.4 | 14,058 |
+| `groq:openai/gpt-oss-120b` | 9 | 9 | 0 | 0 | 100% | 9/9 | 0/6 runs | 31 | 0.00 | 105 s | 9.8 | 18,126 |
+| `groq:openai/gpt-oss-20b` | 9 | 8 | 1 | 0 | 100% | 8/8 | 0/6 runs | 26 | 0.00 | 140 s | 10.5 | 23,104 |
+| `groq:qwen/qwen3.8-27b` | 9 | 4 | 5 | 0 | 100% | 4/4 | 0/3 runs | 1 | 0.00 | 201 s | 12.5 | 14,369 |
 | `ollama:qwen2.5:7b` | 9 | 9 | 0 | 0 | 100% | 9/9 | 0/6 runs | 22 | 0.00 | 101 s | 12.1 | 11,575 |
 
 #### By question
 
 | Question | Model | Recall by seed | Decoys accepted | Remedy recommended for each cause found |
 |---|---|---|---|---|
-| `broker_channel` | `groq:openai/gpt-oss-120b` | 7: 100%, 42: 100%, 1234: error | 0/2 | 2/2 |
-| `broker_channel` | `groq:openai/gpt-oss-20b` | 7: 100%, 42: 100%, 1234: error | 0/2 | 1/2 |
-| `broker_channel` | `groq:qwen/qwen3.8-27b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 1/3 |
+| `broker_channel` | `groq:openai/gpt-oss-120b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
+| `broker_channel` | `groq:openai/gpt-oss-20b` | 7: 100%, 42: 100%, 1234: error | 0/2 | 2/2 |
+| `broker_channel` | `groq:qwen/qwen3.8-27b` | 7: error, 42: 100%, 1234: error | 0/1 | 1/1 |
 | `broker_channel` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
-| `health_vs_motor` | `groq:openai/gpt-oss-120b` | 7: 100%, 42: 0%, 1234: error | 0/2 | 1/1 |
-| `health_vs_motor` | `groq:openai/gpt-oss-20b` | 7: 100%, 42: 100%, 1234: error | 0/2 | 2/2 |
-| `health_vs_motor` | `groq:qwen/qwen3.8-27b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
+| `health_vs_motor` | `groq:openai/gpt-oss-120b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
+| `health_vs_motor` | `groq:openai/gpt-oss-20b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
+| `health_vs_motor` | `groq:qwen/qwen3.8-27b` | 7: error, 42: 100%, 1234: error | 0/1 | 1/1 |
 | `health_vs_motor` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
-| `sla_root_causes` | `groq:openai/gpt-oss-120b` | 7: 75%, 42: 100%, 1234: error | 0/2 | 7/7 |
-| `sla_root_causes` | `groq:openai/gpt-oss-20b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 10/12 |
-| `sla_root_causes` | `groq:qwen/qwen3.8-27b` | 7: 75%, 42: 100%, 1234: 100% | 0/3 | 11/11 |
+| `sla_root_causes` | `groq:openai/gpt-oss-120b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 12/12 |
+| `sla_root_causes` | `groq:openai/gpt-oss-20b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 11/12 |
+| `sla_root_causes` | `groq:qwen/qwen3.8-27b` | 7: 100%, 42: 100%, 1234: error | 0/2 | 8/8 |
 | `sla_root_causes` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 10/12 |
 
 #### Planted causes found (all questions that expect them)
 
-| Model | RC1 Senior approval queue | RC2 Broker documents | RC3 Team B rework | RC4 Friday backlog |
-|---|---|---|---|---|
-| `groq:openai/gpt-oss-120b` | 3/4 | 3/4 | 2/2 | 2/2 |
-| `groq:openai/gpt-oss-20b` | 5/5 | 5/5 | 3/3 | 3/3 |
-| `groq:qwen/qwen3.8-27b` | 6/6 | 6/6 | 3/3 | 2/3 |
-| `ollama:qwen2.5:7b` | 6/6 | 6/6 | 3/3 | 3/3 |
+| Model | RC1 Senior approval queue | RC2 Broker documents | RC3 Team B rework | RC4 Friday backlog | RC5 Monsoon surveyor backlog |
+|---|---|---|---|---|---|
+| `groq:openai/gpt-oss-120b` | 6/6 | 6/6 | 3/3 | 3/3 | – |
+| `groq:openai/gpt-oss-20b` | 6/6 | 5/5 | 3/3 | 3/3 | – |
+| `groq:qwen/qwen3.8-27b` | 3/3 | 3/3 | 2/2 | 2/2 | – |
+| `ollama:qwen2.5:7b` | 6/6 | 6/6 | 3/3 | 3/3 | – |
 
 #### Safeguards at work
 
@@ -53,23 +53,21 @@ How often the deterministic safeguards changed the outcome:
 
 | Model | Hypotheses added by coverage rule | Downgraded (model said supported; confounded or small sample) | Upgraded (code-worded hypothesis, strong evidence) | Findings confirmed by evidence rule | Runs whose summary needed a rewrite | Negative-value actions recommended |
 |---|---|---|---|---|---|---|
-| `groq:openai/gpt-oss-120b` | 7 | 5 | 0 | 0 | 1/6 | 4/6 |
-| `groq:openai/gpt-oss-20b` | 20 | 5 | 0 | 0 | 2/7 | 5/7 |
-| `groq:qwen/qwen3.8-27b` | 4 | 1 | 0 | 0 | 0/9 | 6/9 |
+| `groq:openai/gpt-oss-120b` | 34 | 6 | 0 | 25 | 0/9 | 9/9 |
+| `groq:openai/gpt-oss-20b` | 34 | 6 | 0 | 20 | 1/8 | 8/8 |
+| `groq:qwen/qwen3.8-27b` | 2 | 1 | 0 | 0 | 1/4 | 4/4 |
 | `ollama:qwen2.5:7b` | 34 | 15 | 0 | 7 | 1/9 | 3/9 |
 
 Downgrades stop decoys (a model calling a confounded effect a cause). Upgrades and confirmed findings stop over-caution: the evidence rule only ever adds or upgrades hypotheses worded by code from evidence that is significant, large enough, not a small sample and not explained by any confounder; a sentence the model wrote is never re-judged. Runs made before the upgrade rules existed could only downgrade. *Negative-value actions recommended* counts runs that recommended an action whose estimated net value is negative; the recommender may do so only when no positive action addresses a supported cause, and the UI marks it "Not cost-effective".
 
 #### Failures and misses (every one)
 
-- **`groq:openai/gpt-oss-120b` · `broker_channel` · seed 1234**: **rate limit (provider quota)**: `RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_<redacted>` service tier `on_demand` on tokens per day (TPD): Limit 200`
-- **`groq:openai/gpt-oss-120b` · `health_vs_motor` · seed 42**: missed RC1. Hypotheses: H1 [inconclusive] Health claims have longer cycle times because they are routed through Senior Approval more frequently, and the; H2 [inconclusive] The higher breach rate for health claims is actually driven by larger claim amounts, which require senior appr; H3 [refuted] Claims submitted via brokers generate more document requests, leading to delays; if health claims are dispropo; H4 [inconclusive] Friday handoffs add extra waiting time, and health claims tend to be handed over later in the week, causing hi; H5 [inconclusive] Team B has higher verification rework and breach rates; if health claims are assigned more often to Team B, th
-- **`groq:openai/gpt-oss-120b` · `health_vs_motor` · seed 1234**: **rate limit (provider quota)**: `RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_<redacted>` service tier `on_demand` on tokens per day (TPD): Limit 200`
-- **`groq:openai/gpt-oss-120b` · `sla_root_causes` · seed 7**: missed RC2. Hypotheses: H1 [refuted] The prolonged waiting time before Senior Approval is the primary driver of SLA breaches.; H2 [supported] Claims in the ₹2L–₹5L and >₹5L amount bands experience higher breach rates due to additional documentation and; H3 [supported] Friday handoffs cause a 24‑hour (or 54‑hour) delay that pushes many claims past the 5‑day SLA.; H4 [supported] Team B’s higher verification rework rate leads to longer cycle times and SLA breaches.; H5 [refuted] Broker channel’s higher breach rate appears significant, but it may be confounded by the higher claim amounts 
-- **`groq:openai/gpt-oss-120b` · `sla_root_causes` · seed 1234**: **rate limit (provider quota)**: `RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_<redacted>` service tier `on_demand` on tokens per day (TPD): Limit 200`
 - **`groq:openai/gpt-oss-20b` · `broker_channel` · seed 1234**: **rate limit (provider quota)**: `RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-20b` in organization `org_<redacted>` service tier `on_demand` on tokens per day (TPD): Limit 2000`
-- **`groq:openai/gpt-oss-20b` · `health_vs_motor` · seed 1234**: **rate limit (provider quota)**: `RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-20b` in organization `org_<redacted>` service tier `on_demand` on tokens per day (TPD): Limit 2000`
-- **`groq:qwen/qwen3.8-27b` · `sla_root_causes` · seed 7**: missed RC4. Hypotheses: H1 [supported] Claims in the ₹2L–₹5L and >₹5L bands are systematically routed to Senior Approval, creating a bottleneck that ; H2 [supported] Broker-originated claims have a significantly higher rate of additional document requests, causing delays in t; H3 [supported] Team B has a high rework rate in Verification, indicating process inefficiencies or skill gaps that lead to de; H4 [refuted] Health claims have a higher breach rate due to the complexity and time-consuming nature of Medical Adjudicatio; H5 [inconclusive] Claims handed over on Fridays, particularly in the afternoon, experience significant delays due to weekend gap; H6 [refuted] The higher breach and document request rates in Pune may be misleading due to a small sample size and could be
+- **`groq:qwen/qwen3.8-27b` · `broker_channel` · seed 7**: **rate limit (provider quota)**: `RateLimitError: Error code: 429 - {'error': {'message': "Request too large for model `qwen/qwen3.8-27b` in organization `org_<redacted>` service tier `on_demand` on output tokens per minute (OTPM): Li`
+- **`groq:qwen/qwen3.8-27b` · `broker_channel` · seed 1234**: **rate limit (provider quota)**: `RateLimitError: Error code: 429 - {'error': {'message': "Request too large for model `qwen/qwen3.8-27b` in organization `org_<redacted>` service tier `on_demand` on output tokens per minute (OTPM): Li`
+- **`groq:qwen/qwen3.8-27b` · `health_vs_motor` · seed 7**: **rate limit (provider quota)**: `RateLimitError: Error code: 429 - {'error': {'message': "Request too large for model `qwen/qwen3.8-27b` in organization `org_<redacted>` service tier `on_demand` on output tokens per minute (OTPM): Li`
+- **`groq:qwen/qwen3.8-27b` · `health_vs_motor` · seed 1234**: **rate limit (provider quota)**: `RateLimitError: Error code: 429 - {'error': {'message': "Request too large for model `qwen/qwen3.8-27b` in organization `org_<redacted>` service tier `on_demand` on output tokens per minute (OTPM): Li`
+- **`groq:qwen/qwen3.8-27b` · `sla_root_causes` · seed 1234**: **rate limit (provider quota)**: `RateLimitError: Error code: 429 - {'error': {'message': "Request too large for model `qwen/qwen3.8-27b` in organization `org_<redacted>` service tier `on_demand` on output tokens per minute (OTPM): Li`
 
 ### 2. Grounded answers (policy Q&A)
 
@@ -125,9 +123,9 @@ Quality columns cover completed runs only. *Rate-limited* runs never reached the
 
 #### Planted causes found (all questions that expect them)
 
-| Model | RC1 Chakan goods receipts | RC2 Free-text PO price exceptions | RC3 BPO capture errors | RC4 Weekly payment run |
-|---|---|---|---|---|
-| `ollama:qwen2.5:7b` | 3/3 | 6/6 | 6/6 | 3/3 |
+| Model | RC1 Chakan goods receipts | RC2 Free-text PO price exceptions | RC3 BPO capture errors | RC4 Weekly payment run | RC5 Paper invoices wait for capture |
+|---|---|---|---|---|---|
+| `ollama:qwen2.5:7b` | 3/3 | 6/6 | 6/6 | 3/3 | – |
 
 #### Safeguards at work
 
@@ -236,6 +234,15 @@ the fixed code:
    4,096 because reasoning models count hidden reasoning against it); the largest legitimate
    structured output measured was 551 tokens.
 
+10. **Found by the new observability page (M8): parallel assessment lost its context.** The
+   assessor's worker threads copied their context inside the worker (an empty context), not
+   from the investigation's thread. Every assessor call was therefore unattributed in the
+   traces, and in a non-default pack the assessor's evidence descriptions and upgrade reasons
+   used the default pack's wording ("claims" instead of "invoices", outcome ids instead of
+   labels). Scoring is structural, so the procure-to-pay results above are unaffected; the
+   wording in those runs' assessor prompts was. Context is now copied at submit time, with a
+   regression test.
+
 **Not yet re-run (provider quota).** The cloud runs started at 14:43, a minute before fix 2
 was applied, so the three Groq models' `broker_channel` results predate it; their low "remedy
 recommended" counts on that question reflect the bug, not the models. The local model was
@@ -251,10 +258,37 @@ confounder checks showed the effect persisting, and left the correct claim-value
 "inconclusive" in one health-vs-motor run. Rules A and B now surface such causes as
 separate, code-worded findings; the model's own sentences are still never re-judged.
 
-12 earlier result(s) were re-run after a fix and replaced:
+39 earlier result(s) were re-run after a fix and replaced:
 
 | Pack | Model | Seed | Question | Earlier result |
 |---|---|---|---|---|
+| insurance_claims | `groq:openai/gpt-oss-120b` | 7 | `sla_root_causes` | recall 75%, remedy recommended 3/3 |
+| insurance_claims | `groq:openai/gpt-oss-120b` | 7 | `health_vs_motor` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `groq:openai/gpt-oss-120b` | 7 | `broker_channel` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `groq:openai/gpt-oss-120b` | 42 | `sla_root_causes` | recall 100%, remedy recommended 4/4 |
+| insurance_claims | `groq:openai/gpt-oss-120b` | 42 | `health_vs_motor` | recall 0%, remedy recommended 0/0 |
+| insurance_claims | `groq:openai/gpt-oss-120b` | 42 | `broker_channel` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `groq:openai/gpt-oss-120b` | 1234 | `sla_root_causes` | failed: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for  |
+| insurance_claims | `groq:openai/gpt-oss-120b` | 1234 | `health_vs_motor` | failed: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for  |
+| insurance_claims | `groq:openai/gpt-oss-120b` | 1234 | `broker_channel` | failed: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for  |
+| insurance_claims | `groq:openai/gpt-oss-20b` | 7 | `sla_root_causes` | recall 100%, remedy recommended 4/4 |
+| insurance_claims | `groq:openai/gpt-oss-20b` | 7 | `health_vs_motor` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `groq:openai/gpt-oss-20b` | 7 | `broker_channel` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `groq:openai/gpt-oss-20b` | 42 | `sla_root_causes` | recall 100%, remedy recommended 4/4 |
+| insurance_claims | `groq:openai/gpt-oss-20b` | 42 | `health_vs_motor` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `groq:openai/gpt-oss-20b` | 42 | `broker_channel` | recall 100%, remedy recommended 0/1 |
+| insurance_claims | `groq:openai/gpt-oss-20b` | 1234 | `sla_root_causes` | recall 100%, remedy recommended 2/4 |
+| insurance_claims | `groq:openai/gpt-oss-20b` | 1234 | `health_vs_motor` | failed: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for  |
+| insurance_claims | `groq:openai/gpt-oss-20b` | 1234 | `broker_channel` | failed: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for  |
+| insurance_claims | `groq:qwen/qwen3.8-27b` | 7 | `sla_root_causes` | recall 75%, remedy recommended 3/3 |
+| insurance_claims | `groq:qwen/qwen3.8-27b` | 7 | `health_vs_motor` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `groq:qwen/qwen3.8-27b` | 7 | `broker_channel` | recall 100%, remedy recommended 0/1 |
+| insurance_claims | `groq:qwen/qwen3.8-27b` | 42 | `sla_root_causes` | recall 100%, remedy recommended 4/4 |
+| insurance_claims | `groq:qwen/qwen3.8-27b` | 42 | `health_vs_motor` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `groq:qwen/qwen3.8-27b` | 42 | `broker_channel` | recall 100%, remedy recommended 0/1 |
+| insurance_claims | `groq:qwen/qwen3.8-27b` | 1234 | `sla_root_causes` | recall 100%, remedy recommended 4/4 |
+| insurance_claims | `groq:qwen/qwen3.8-27b` | 1234 | `health_vs_motor` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `groq:qwen/qwen3.8-27b` | 1234 | `broker_channel` | recall 100%, remedy recommended 1/1 |
 | insurance_claims | `ollama:qwen2.5:7b` | 7 | `broker_channel` | recall 100%, remedy recommended 0/1 |
 | insurance_claims | `ollama:qwen2.5:7b` | 7 | `sla_root_causes` | recall 100%, remedy recommended 4/4 |
 | insurance_claims | `ollama:qwen2.5:7b` | 7 | `health_vs_motor` | recall 100%, remedy recommended 1/1 |

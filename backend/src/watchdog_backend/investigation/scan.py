@@ -131,12 +131,15 @@ def _bottleneck_signals(activities: ActivityAnalysis, cases_label: str) -> list[
 
 def monthly_wait(frames: Frames, activity: str) -> dict | None:
     """Mean wait before `activity` per month, and its correlation with the monthly breach
-    rate. Catches a queue that changed over time even when every case passes through it
-    (so there is no "without" group to compare with)."""
+    rate of the cases that pass through it (a queue can only delay those; another change in
+    the period, elsewhere in the process, would otherwise blur the comparison). Catches a
+    queue that changed over time even when every case passes through it (so there is no
+    "without" group to compare with)."""
     cases = frames.cases[["case_id", "month", "breached"]]
     ev = frames.events.loc[frames.events["activity"] == activity, ["case_id", "wait_hours"]]
     wait = ev.merge(cases, on="case_id").groupby("month")["wait_hours"].mean()
-    breach = cases.groupby("month")["breached"].mean()
+    through = cases[cases["case_id"].isin(ev["case_id"])]
+    breach = through.groupby("month")["breached"].mean()
     both = pd.concat([wait.rename("wait"), breach.rename("breach")], axis=1).dropna()
     if len(both) < MIN_MONTHS or both["wait"].nunique() < 2 or both["breach"].nunique() < 2:
         return None

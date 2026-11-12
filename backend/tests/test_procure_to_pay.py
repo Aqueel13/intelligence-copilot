@@ -132,7 +132,8 @@ def test_every_invoice_starts_received_and_ends_paid(p2p_dataset) -> None:
 def test_every_planted_cause_drives_breaches(p2p_dataset) -> None:
     s = p2p_dataset.summary()
     for cause, v in s["root_causes"].items():
-        assert v["share_of_breaches"] >= 0.08, cause
+        # RC4 (weekly payment runs) covers only the last three of the 18 months
+        assert v["share_of_breaches"] >= (0.05 if cause == "RC4" else 0.08), cause
     assert s["breach_rate_without_any_planted_cause"] < 0.12
 
 
@@ -145,6 +146,17 @@ def test_decoys_look_bad_but_vanish_within_their_confounder(p2p_dataset) -> None
     assert dc2["breach_rate"] > dc2["breach_rate_large"] + 0.04
     for team, rate in dc2["breach_rate_by_ap_team_msme"].items():
         assert rate <= dc2["breach_rate_by_ap_team_large"][team] + 0.03
+    dc3 = d["DC3_sanand"]
+    assert dc3["breach_rate"] > dc3["breach_rate_other_plants"] + 0.05
+    assert dc3["paper_share"] > 0.5 > 0.2 > dc3["paper_share_other_plants"]
+    for channel, rate in dc3["breach_rate_by_channel_sanand"].items():
+        assert rate <= dc3["breach_rate_by_channel_other"][channel] + 0.03
+
+
+def test_march_year_end_rush(p2p_dataset) -> None:
+    by_month = p2p_dataset.summary()["seasonality"]["invoices_by_month"]
+    others = [n for m, n in by_month.items() if not m.endswith("-03")]
+    assert by_month["2026-03"] > 1.25 * (sum(others) / len(others))
 
 
 def test_weekly_payment_run_starts_in_july(p2p_dataset) -> None:
@@ -162,21 +174,26 @@ def test_weekly_payment_run_starts_in_july(p2p_dataset) -> None:
 def test_scan_surfaces_every_planted_cause(p2p_ctx, p2p_pack) -> None:
     result = scan(p2p_ctx.frames, p2p_ctx.activities, p2p_pack.analysis.dimensions)
     ids = {s.id for s in result.signals}
-    assert "bottleneck:Goods Receipt Confirmation" in ids  # RC1
+    assert "seg:grn_pending:plant:Chakan" in ids  # RC1
     assert "seg:breached:plant:Chakan" in ids  # RC1
     assert "seg:price_exception:po_type:free_text" in ids  # RC2
     assert "seg:recapture:ap_team:BPO Partner" in ids  # RC3
     assert "bottleneck:Payment Run" in ids  # RC4: a queue that changed over time
+    assert "seg:breached:invoice_channel:paper" in ids  # RC5
+    assert "seg:breached:plant:Sanand" in ids  # DC3 shows up as a signal (explained below)
 
 
 @pytest.mark.parametrize(
     "check",
     [
-        ActivityWaitCheck(activity="Goods Receipt Confirmation"),
+        # RC1: since paper invoices lengthened capture waits, the goods-receipt queue is no
+        # longer 2× the median queue (not a "bottleneck"); Chakan's pending rate shows it.
+        SegmentCheck(dimension="plant", value="Chakan", outcome="grn_pending"),
         SegmentCheck(dimension="plant", value="Chakan"),
         SegmentCheck(dimension="po_type", value="free_text", outcome="price_exception"),
         SegmentCheck(dimension="ap_team", value="BPO Partner", outcome="recapture"),
         ActivityWaitCheck(activity="Payment Run"),
+        SegmentCheck(dimension="invoice_channel", value="paper"),
     ],
 )
 def test_planted_causes_meet_the_strict_support_rule(p2p_ctx, check) -> None:
@@ -190,6 +207,7 @@ def test_planted_causes_meet_the_strict_support_rule(p2p_ctx, check) -> None:
     [
         (("category", "IT services"), "po_type"),  # DC1
         (("vendor_size", "MSME"), "ap_team"),  # DC2
+        (("plant", "Sanand"), "invoice_channel"),  # DC3
     ],
 )
 def test_decoys_are_explained_by_their_confounder(p2p_ctx, value, confounder) -> None:
@@ -226,6 +244,7 @@ def test_whatif_estimates_track_the_counterfactual_truth(p2p_ctx, p2p_dataset) -
             ("enforce_catalogue_buying", "RC2"),
             ("retrain_bpo_capture", "RC3"),
             ("restore_twice_weekly_runs", "RC4"),
+            ("enforce_e_invoicing", "RC5"),
         ]:
             est = evaluate_action(p2p_ctx.frames, cat.actions[action_id], cat.economics)
             actual = truth[cause]["breaches_attributable"]
@@ -322,6 +341,8 @@ def test_timid_model_still_finds_every_planted_cause_and_no_decoy(p2p_db, p2p_pa
         "enforce_catalogue_buying",
         "retrain_bpo_capture",
         "restore_twice_weekly_runs",
+        "enforce_e_invoicing",
+        "scan_paper_invoices_at_plants",
     }  # the P2P catalogue, valued by the same what-if engine
 
 
@@ -335,7 +356,7 @@ def client(p2p_db, client_as):
 
 def test_domains_endpoint_lists_both_packs(client) -> None:
     rows = {d["domain"]: d for d in client.get("/api/domains").json()}
-    assert rows[P2P]["cases"] == 6000 and rows[P2P]["case_label_plural"] == "invoices"
+    assert rows[P2P]["cases"] == 18000 and rows[P2P]["case_label_plural"] == "invoices"
     assert rows["insurance_claims"]["cases"] > 0
 
 
@@ -350,7 +371,7 @@ def test_header_selects_the_pack(client) -> None:
 def test_metrics_are_isolated_per_pack(client) -> None:
     body = MetricQuery(metric="case_count").model_dump(mode="json")
     p2p = client.post("/api/metrics/query", json=body, headers={"X-Domain": P2P}).json()
-    assert p2p["rows"][0]["value"] == 6000
+    assert p2p["rows"][0]["value"] == 18000
     wrong = MetricQuery(metric="price_exception_rate").model_dump(mode="json")
     # not an insurance metric: the default pack rejects it
     assert client.post("/api/metrics/query", json=wrong).status_code == 422

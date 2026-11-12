@@ -30,6 +30,15 @@ def activities(db_engine, pack):
 
 
 @pytest.fixture(scope="module")
+def since_april(db_engine, pack):
+    """Since POL-002 v2 (April 2026): the period where health looks slower (DC1)."""
+    from datetime import date
+
+    with db_engine.connect() as c:
+        return load_frames(c, MetricsEngine(pack), ProcessQuery(period_from=date(2026, 4, 1)))
+
+
+@pytest.fixture(scope="module")
 def truth(dataset):
     return json.loads(json.dumps(dataset.summary(), default=str))
 
@@ -68,6 +77,19 @@ def test_scan_finds_every_planted_pattern(frames, activities) -> None:
     assert "seg:doc_requested:channel:broker" in ids  # RC2
     assert "seg:rework:team:Team B" in ids  # RC3
     assert "weekday:Fri" in ids  # RC4
+    assert "bottleneck:Survey & Loss Assessment" in ids  # RC5
+    assert "seg:rework:region:Kolkata" in ids  # DC4 shows up as a signal…
+
+
+def test_kolkata_signal_is_explained_by_team(frames) -> None:
+    # …and controlling for team rules it out.
+    df = frames.cases.assign(y=frames.cases["rework"].astype(float))
+    r = stratified_difference(df, df["region"] == "Kolkata", "y", "team", "k")
+    assert r.raw_difference > 0.03 and r.explained_by_control
+
+
+def test_dc1_health_signal_since_the_threshold_change(since_april, activities) -> None:
+    ids = {s.id for s in scan(since_april, activities, DIMS).signals}
     assert "seg:breached:line_of_business:health" in ids  # DC1 shows up as a signal…
 
 
@@ -76,9 +98,9 @@ def test_scan_reports_only_the_adverse_side(frames, activities) -> None:
     assert "seg:breached:line_of_business:motor" not in ids
 
 
-def test_health_signal_is_explained_by_amount(frames) -> None:
+def test_health_signal_is_explained_by_amount(since_april) -> None:
     # …and the confounder check is what lets the agent rule DC1 out.
-    df = frames.cases.assign(y=frames.cases["breached"].astype(float))
+    df = since_april.cases.assign(y=since_april.cases["breached"].astype(float))
     r = stratified_difference(df, df["line_of_business"] == "health", "y", "amount_band", "h")
     assert r.explained_by_control
 
@@ -94,6 +116,12 @@ def test_health_signal_is_explained_by_amount(frames) -> None:
         ("enforce_broker_checklist", ("root_causes", "RC2", "breaches_attributable"), 0.6, 1.3),
         ("retrain_team_b", ("root_causes", "RC3", "breaches_attributable"), 0.6, 1.4),
         ("saturday_rota", ("root_causes", "RC4", "breaches_attributable"), 0.3, 1.2),
+        (
+            "activate_monsoon_survey_panel",
+            ("root_causes", "RC5", "breaches_attributable"),
+            0.5,
+            1.3,
+        ),
     ],
 )
 def test_what_if_tracks_ground_truth(frames, truth, action, truth_key, low, high) -> None:

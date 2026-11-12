@@ -94,6 +94,24 @@ actions:
                  filters: { team: [Team B] } }
     operation: { type: schedule_training, params: { team: Team B, programme: QA rejection reasons } }
 
+  activate_monsoon_survey_panel:
+    title: Activate the monsoon surge surveyor panel
+    description: >
+      Activate the pre-empanelled surge panel of independent surveyors and video surveys from
+      1 July to 30 September, as OPS-302 provides, so motor surveys keep to the one-working-day
+      appointment target through the monsoon.
+    policy_refs: ["OPS-302 §3", "OPS-302 §4", "SOP-103 §2.1"]
+    effort: medium
+    lever: { kind: cap_wait, activity: Survey & Loss Assessment, target_hours: 24,
+             filters: { line_of_business: [motor] } }
+    annual_cost:
+      basis: Surge panel retainer for three months plus per-survey fees above the network rate
+      fixed_inr: 900000
+    follow_up: { metric: avg_wait_hours, expect: below, target: 24,
+                 filters: { activity: [Survey & Loss Assessment] } }
+    operation: { type: create_staffing_request,
+                 params: { role: Surge panel surveyors (monsoon), headcount: 12 } }
+
   saturday_rota:
     title: Activate the Saturday half-day rota
     description: >

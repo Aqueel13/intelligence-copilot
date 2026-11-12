@@ -25,6 +25,9 @@ approvals:
   retrain_team_b:
     roles: [Quality Assurance Lead, Claims Operations Manager]
     basis: "SOP-105 §5.1: retraining is owned by Quality Assurance"
+  activate_monsoon_survey_panel:
+    roles: [Claims Operations Manager, Head of Claims]
+    basis: "OPS-302 §4: the Claims Operations Manager activates the surge panel"
   saturday_rota:
     roles: [Chief Operating Officer]
     basis: "POL-003 §3.1: the Saturday rota needs approval of the Chief Operating Officer"

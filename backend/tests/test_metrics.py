@@ -111,8 +111,17 @@ def test_rc4_friday_handoffs_wait_longer(run) -> None:
     assert waits["Fri"] > 2 * max(waits[d] for d in ("Mon", "Tue", "Wed", "Thu"))
 
 
-def test_dc2_pune_flagged_as_low_sample(run) -> None:
-    rows = {r.group["region"]: r for r in run(metric="sla_breach_rate", group_by=["region"]).rows}
+def test_dc2_pune_flagged_as_low_sample_within_a_month(run) -> None:
+    # Pune is tiny: about 15 claims a month, too few to judge a monthly rate on.
+    rows = {
+        r.group["region"]: r
+        for r in run(
+            metric="sla_breach_rate",
+            group_by=["region"],
+            period_from="2026-09-01",
+            period_to="2026-09-30",
+        ).rows
+    }
     assert rows["Pune"].low_sample
     assert not rows["Mumbai"].low_sample
 

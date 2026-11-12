@@ -16,13 +16,13 @@ Varaha Auto Components Pvt. Ltd. (fictional)
 
 1.1 Suppliers submit invoices through the **supplier portal** (structured e-invoice, no manual capture needed for header data), by **e-mail** (PDF) or on **paper** at the plant gate.
 
-1.2 Large suppliers mostly use the portal. MSME suppliers mostly send PDF or paper invoices.
+1.2 Most suppliers use the portal or e-mail. Paper invoices still arrive at the plant gates, mostly from local job-work suppliers; they are scanned centrally before capture (AP-104).
 
 ## 2. Who captures
 
-2.1 **AP Pune** and **AP Chennai** (in-house) capture portal and e-mail invoices for their region's plants.
+2.1 **AP Pune** and **AP Chennai** (in-house) capture invoices from large suppliers for their region's plants, whatever the channel.
 
-2.2 The **BPO Partner** (outsourced since October 2025) captures all paper invoices and overflow e-mail invoices, for all plants.
+2.2 The **BPO Partner** (outsourced since October 2024) captures invoices from MSME suppliers, for all plants, and overflow invoices when the in-house teams are behind.
 
 ## 3. Capture steps
 

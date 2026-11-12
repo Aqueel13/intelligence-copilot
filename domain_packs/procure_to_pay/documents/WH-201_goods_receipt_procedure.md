@@ -32,7 +32,7 @@ Varaha Auto Components Pvt. Ltd. (fictional)
 
 4.1 Each plant has one stores clerk per shift responsible for GRN posting. Chakan, the largest plant by inbound deliveries, has two.
 
-4.2 Chakan lost one of its two GRN clerks in March 2026; the position has not been back-filled.
+4.2 Chakan lost one of its two GRN clerks in March 2025; the position has not been back-filled (hiring freeze on indirect staff).
 
 ## 5. Escalation and improvement
 

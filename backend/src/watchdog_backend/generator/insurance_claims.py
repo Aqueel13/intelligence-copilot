@@ -10,14 +10,19 @@ Design:
   database the copilot can see; they exist for tests and evaluation only.
 
 Planted causes (see docs/PROJECT_BRIEF.md §5):
-  RC1  Senior approval queue understaffed for claims > ₹2L (and getting worse over time)
+  RC1  Senior approval queue understaffed since POL-002 v2 lowered the threshold from ₹5L to ₹2L
+       on 1 April 2026 (the capacity plan still assumed ₹5L), and getting worse over time
   RC2  Broker-channel claims often arrive with missing documents
   RC3  Team B's verification work is rejected by QA far more often
   RC4  Handoffs late on Friday wait for the Monday backlog
+  RC5  Monsoon (Jul–Sep): motor claims surge and the surveyor network falls behind, so motor
+       surveys wait days for a surveyor; the surge panel in OPS-302 was never activated
 Decoys:
   DC1  Health looks slower, but only because health claims are higher-value (→ RC1)
   DC2  Pune looks worse, but it is tiny and broker-heavy (→ RC2)
   DC3  Respondent CSAT understates true CSAT (non-response bias)
+  DC4  Kolkata looks worse, but most of its claims are routed to Team B (→ RC3)
+Seasonality: motor FNOL volume rises in the monsoon months (more accidents and flood damage).
 """
 
 import math
@@ -40,7 +45,7 @@ from watchdog_backend.generator.common import (
     lognormal,
 )
 
-CAUSES = ("RC1", "RC2", "RC3", "RC4")
+CAUSES = ("RC1", "RC2", "RC3", "RC4", "RC5")
 
 # How each catalogue action changes the world, in generator terms (the next-month simulator).
 ACTION_EFFECTS: dict[str, dict[str, object]] = {
@@ -49,6 +54,7 @@ ACTION_EFFECTS: dict[str, dict[str, object]] = {
     "enforce_broker_checklist": {"doc_request_broker_total": 0.06},  # = the base rate
     "retrain_team_b": {"qa_reject_team_b_total": 0.05},  # = the base rate
     "saturday_rota": {"rc4_probability": 0.0},
+    "activate_monsoon_survey_panel": {"rc5_enabled": False},
 }
 NO_CAUSES: frozenset[str] = frozenset()
 ALL_CAUSES: frozenset[str] = frozenset(CAUSES)
@@ -59,10 +65,10 @@ RC4_SLOTS = 16
 
 @dataclass(frozen=True)
 class GeneratorConfig:
-    n_claims: int = 5000
+    n_claims: int = 18000
     seed: int = 42
     # Trend window: RC1 worsens from `start` to `end` (and keeps worsening after it).
-    start: date = date(2026, 4, 1)
+    start: date = date(2025, 4, 1)
     end: date = date(2026, 9, 30)
     # Generation window: FNOL dates are drawn from here (defaults to the trend window).
     # The simulator uses it to append later months that continue the same trends.
@@ -90,6 +96,10 @@ class GeneratorConfig:
         }
     )
     teams: tuple[str, ...] = ("Team A", "Team B", "Team C")
+    # DC4: Kolkata's claims are mostly routed to Team B (REF-203 regional allocation).
+    kolkata_team_weights: dict[str, float] = field(
+        default_factory=lambda: {"Team A": 0.10, "Team B": 0.80, "Team C": 0.10}
+    )
 
     # Amounts (lognormal). DC1: health skews higher-value.
     motor_amount_median: float = 60_000
@@ -110,7 +120,11 @@ class GeneratorConfig:
     qa_reject_repeat_factor: float = 0.40
     rework_requeue_wait_median_h: float = 9.0
 
-    # RC1: senior approval queue (extra waiting in working hours, rising Apr → Sep)
+    # RC1: senior approval queue (extra waiting in working hours, rising from the change)
+    # POL-002 v2: senior approval above ₹2L from this date; above ₹5L before it, when the
+    # queue was adequately staffed.
+    threshold_change: date = date(2026, 4, 1)
+    senior_threshold_before_inr: float = 500_000
     rc1_enabled: bool = True
     # Claims up to this amount skip the senior queue (delegated to Team Leads); None = no one
     rc1_exempt_max_amount: float | None = None
@@ -122,6 +136,12 @@ class GeneratorConfig:
     rc4_from: time = time(15, 0)
     rc4_probability: float = 0.8
     rc4_backlog_hours: tuple[float, float] = (3.0, 8.0)
+
+    # RC5 + seasonality: monsoon months (by FNOL month)
+    monsoon_months: tuple[int, ...] = (7, 8, 9)
+    motor_monsoon_volume_factor: float = 1.6  # motor FNOLs per day vs the rest of the year
+    rc5_enabled: bool = True
+    rc5_extra_wait_median_h: float = 7.0  # working hours waiting for a surveyor
 
     # Feedback (DC3: unhappy customers respond more)
     response_rate_at_csat5: float = 0.16
@@ -150,6 +170,8 @@ class Draws:
         self.csat_noise, self.nps_noise = z(2)
         self.respond, self.has_comment, self.sent_delay, self.response_delay = u(4)
         self.comment_pick = u(2)
+        # Added with RC5/DC4; drawn last, so every earlier draw is unchanged.
+        self.rc5_extra = z()
 
 
 @dataclass(frozen=True)
@@ -162,6 +184,7 @@ class ClaimProfile:
     amount: float
     fnol_at: datetime
     month_index: int  # 0 = first month of the period
+    monsoon: bool
 
 
 class InsuranceClaimsGenerator:
@@ -176,9 +199,23 @@ class InsuranceClaimsGenerator:
         assert pack.approval is not None, "the insurance pack declares an approval section"
         self.approval = pack.approval
         self.senior_threshold = pack.approval.senior_threshold_inr
-        self.n_months = (self.cfg.end.year - self.cfg.start.year) * 12 + (
-            self.cfg.end.month - self.cfg.start.month
-        )
+        # RC1's ramp runs from the threshold change to the end of the trend window.
+        change = self.cfg.threshold_change
+        self.n_months = (self.cfg.end.year - change.year) * 12 + (self.cfg.end.month - change.month)
+        self._day_tables: dict[str, np.ndarray] = {}
+
+    def _day(self, u: float, lob: str) -> date:
+        """A FNOL date in the generation window: uniform, except that motor claims are more
+        frequent in the monsoon months (inverse CDF over per-day weights)."""
+        c = self.cfg
+        w_start, w_end = c.window_start or c.start, c.window_end or c.end
+        if lob not in self._day_tables:
+            days = [w_start + timedelta(days=k) for k in range((w_end - w_start).days + 1)]
+            factor = c.motor_monsoon_volume_factor if lob == "motor" else 1.0
+            w = np.array([factor if d.month in c.monsoon_months else 1.0 for d in days])
+            self._day_tables[lob] = np.cumsum(w) / w.sum()
+        idx = int(np.searchsorted(self._day_tables[lob], u, side="right"))
+        return w_start + timedelta(days=min(idx, (w_end - w_start).days))
 
     # ------------------------------------------------------------------ profile
 
@@ -189,7 +226,10 @@ class InsuranceClaimsGenerator:
         channel = choose(
             c.pune_channel_weights if region == "Pune" else c.channel_weights, d.channel
         )
-        team = c.teams[min(int(d.team * len(c.teams)), len(c.teams) - 1)]
+        if region == "Kolkata":
+            team = choose(c.kolkata_team_weights, d.team)
+        else:
+            team = c.teams[min(int(d.team * len(c.teams)), len(c.teams) - 1)]
         median, sigma = (
             (c.motor_amount_median, c.motor_amount_sigma)
             if lob == "motor"
@@ -197,9 +237,8 @@ class InsuranceClaimsGenerator:
         )
         amount = round(min(max(lognormal(median, sigma, d.amount), c.amount_floor), c.amount_cap))
 
-        w_start, w_end = c.window_start or c.start, c.window_end or c.end
-        n_days = (w_end - w_start).days + 1
-        day = w_start + timedelta(days=int(d.fnol_day * n_days))
+        w_end = c.window_end or c.end
+        day = self._day(d.fnol_day, lob)
         if d.fnol_mode < 0.85:  # most FNOLs arrive in working hours on a working day
             while day.weekday() not in self.cal.workdays:
                 day = day + timedelta(days=1) if day < w_end else day - timedelta(days=3)
@@ -219,6 +258,7 @@ class InsuranceClaimsGenerator:
             amount=float(amount),
             fnol_at=fnol_at,
             month_index=month_index,
+            monsoon=day.month in c.monsoon_months,
         )
 
     # --------------------------------------------------------------- simulation
@@ -291,16 +331,16 @@ class InsuranceClaimsGenerator:
             )
 
         # Assessment: survey for motor, medical adjudication for health (same baseline: DC1)
+        assess_wait = lognormal(3.0, 0.7, d.assess_wait)
         if p.lob == "motor":
             activity, resource = "Survey & Loss Assessment", "Surveyor Network"
+            # RC5: in the monsoon the surveyor network is overloaded (no surge panel)
+            if p.monsoon and c.rc5_enabled and "RC5" not in disabled:
+                assess_wait += lognormal(c.rc5_extra_wait_median_h, 0.5, d.rc5_extra)
+                triggered.add("RC5")
         else:
             activity, resource = "Medical Adjudication", "Medical Team"
-        work_step(
-            activity,
-            resource,
-            lognormal(3.0, 0.7, d.assess_wait),
-            lognormal(2.0, 0.5, d.assess_work),
-        )
+        work_step(activity, resource, assess_wait, lognormal(2.0, 0.5, d.assess_work))
 
         # Verification ↔ QA loop (RC3)
         team_b_extra = (c.qa_reject_team_b_total - c.qa_reject_base) / (1 - c.qa_reject_base)
@@ -334,11 +374,16 @@ class InsuranceClaimsGenerator:
                 triggered.add("RC3")
 
         # Senior approval above the threshold (RC1: understaffed, worsening over time)
-        if p.amount > self.senior_threshold:
+        after_change = p.fnol_at.date() >= c.threshold_change
+        threshold = self.senior_threshold if after_change else c.senior_threshold_before_inr
+        if p.amount > threshold:
             wait = lognormal(c.senior_base_wait_median_h, 0.6, d.senior_wait)
             exempt = c.rc1_exempt_max_amount is not None and p.amount <= c.rc1_exempt_max_amount
-            if "RC1" not in disabled and c.rc1_enabled and not exempt:
-                progress = p.month_index / max(self.n_months, 1)
+            if "RC1" not in disabled and c.rc1_enabled and after_change and not exempt:
+                months_since = (p.fnol_at.year - c.threshold_change.year) * 12 + (
+                    p.fnol_at.month - c.threshold_change.month
+                )
+                progress = months_since / max(self.n_months, 1)
                 median = c.rc1_extra_median_first_month_h + progress * (
                     c.rc1_extra_median_last_month_h - c.rc1_extra_median_first_month_h
                 )
@@ -501,6 +546,11 @@ class InsuranceClaimsGenerator:
         )
 
 
+def monsoon_months(t: pd.DataFrame, mask: pd.Series) -> int:
+    """How many distinct calendar months the masked rows span."""
+    return int(pd.to_datetime(t.loc[mask, "opened_at"]).dt.strftime("%Y-%m").nunique())
+
+
 class InsuranceClaimsDataset(GeneratedDataset):
     def summary(self) -> dict[str, object]:
         """Ground-truth summary: what a correct investigation should conclude."""
@@ -520,6 +570,11 @@ class InsuranceClaimsDataset(GeneratedDataset):
         )
         pune = t[t["region"] == "Pune"]
         rest = t[t["region"] != "Pune"]
+        kolkata = t[t["region"] == "Kolkata"]
+        not_kolkata = t[t["region"] != "Kolkata"]
+        month = pd.to_datetime(t["opened_at"]).dt.month
+        monsoon = month.isin(self.config.monsoon_months)  # type: ignore[attr-defined]
+        motor = t["line_of_business"] == "motor"
         fb = self.feedback
 
         delegation_avoided = int((t["breached"] & ~t["delegation_breached"]).sum())
@@ -539,6 +594,20 @@ class InsuranceClaimsDataset(GeneratedDataset):
                 float(t["breached_without_any_cause"].mean()), 3
             ),
             "root_causes": causes,
+            "seasonality": {
+                "motor_claims_per_month_monsoon": round(
+                    float((motor & monsoon).sum()) / max(1, monsoon_months(t, monsoon)), 0
+                ),
+                "motor_claims_per_month_other": round(
+                    float((motor & ~monsoon).sum()) / max(1, monsoon_months(t, ~monsoon)), 0
+                ),
+                "motor_breach_rate_monsoon": round(
+                    float(t.loc[motor & monsoon, "breached"].mean()), 3
+                ),
+                "motor_breach_rate_other": round(
+                    float(t.loc[motor & ~monsoon, "breached"].mean()), 3
+                ),
+            },
             "delegation_scenario": {
                 "description": (
                     "Delegate ₹2L–₹5L approvals to Team Leads "
@@ -567,6 +636,23 @@ class InsuranceClaimsDataset(GeneratedDataset):
                     "broker_share_other_regions": round(
                         float((rest["channel"] == "broker").mean()), 3
                     ),
+                },
+                "DC4_kolkata": {
+                    "claims": len(kolkata),
+                    "breach_rate": round(float(kolkata["breached"].mean()), 3),
+                    "breach_rate_other_regions": round(float(not_kolkata["breached"].mean()), 3),
+                    "team_b_share": round(float((kolkata["team"] == "Team B").mean()), 3),
+                    "team_b_share_other_regions": round(
+                        float((not_kolkata["team"] == "Team B").mean()), 3
+                    ),
+                    "breach_rate_by_team_kolkata": {
+                        str(k): round(float(v), 3)
+                        for k, v in kolkata.groupby("team")["breached"].mean().items()
+                    },
+                    "breach_rate_by_team_other_regions": {
+                        str(k): round(float(v), 3)
+                        for k, v in not_kolkata.groupby("team")["breached"].mean().items()
+                    },
                 },
                 "DC3_csat": {
                     "true_mean_csat_all_customers": round(float(fb["_true_csat"].mean()), 2),

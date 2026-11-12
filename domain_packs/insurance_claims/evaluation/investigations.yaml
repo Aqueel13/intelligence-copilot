@@ -6,13 +6,15 @@ questions:
   - id: sla_root_causes
     question: Why are claims breaching the five-day SLA? Find the root causes and recommend corrective actions.
     scope: {}
-    expect_found: [RC1, RC2, RC3, RC4]
-    decoys: [DC1, DC2]
+    expect_found: [RC1, RC2, RC3, RC4, RC5]
+    decoys: [DC1, DC2, DC4]
 
   - id: health_vs_motor
     # Decoy bait: the honest answer is "it is claim value (senior approval), not health".
+    # Since the ₹2L threshold (April 2026); before it, and with monsoon motor delays, health
+    # and motor take about as long over the full 18 months.
     question: Why do health claims take longer than motor claims?
-    scope: {}
+    scope: { period_from: "2026-04-01" }
     expect_found: [RC1]
     decoys: [DC1]
 
@@ -21,6 +23,19 @@ questions:
     scope: { filters: { channel: [broker] } }
     expect_found: [RC2]
     decoys: []
+
+  - id: monsoon_motor
+    question: Why do motor claims slow down in the monsoon months?
+    scope: { filters: { line_of_business: [motor] } }
+    expect_found: [RC5]
+    decoys: []
+
+  - id: kolkata_region
+    # Decoy bait: Kolkata is not the cause; most of its claims go to Team B.
+    question: Why do Kolkata claims need so much rework, and what should we do?
+    scope: {}
+    expect_found: [RC3]
+    decoys: [DC4]
 
 # What counts as evidence for each planted cause (RC…) or decoy (DC…). A cause is found when a
 # supported hypothesis carries evidence matching one of its targets; a decoy is accepted when a
@@ -40,12 +55,18 @@ ground_truth:
   RC4:
     label: Friday backlog
     targets: [{ check: weekday_handoff, weekday: Fri }]
+  RC5:
+    label: Monsoon surveyor backlog
+    targets: [{ check: activity_wait, activity: Survey & Loss Assessment }]
   DC1:
     label: Health looks slower (it is claim value)
     targets: [{ check: segment, dimension: line_of_business, values: [health], outcome: breached }]
   DC2:
     label: Pune looks worse (small, broker-heavy)
     targets: [{ check: segment, dimension: region, values: [Pune] }]
+  DC4:
+    label: Kolkata looks worse (it is Team B)
+    targets: [{ check: segment, dimension: region, values: [Kolkata] }]
 
 # What-if check: each catalogue action's estimate is compared with an exact counterfactual from
 # the generator's ground-truth summary (path of keys into ground_truth.json).
@@ -55,6 +76,7 @@ whatif_truth:
   enforce_broker_checklist: [root_causes, RC2, breaches_attributable]
   retrain_team_b: [root_causes, RC3, breaches_attributable]
   saturday_rota: [root_causes, RC4, breaches_attributable]
+  activate_monsoon_survey_panel: [root_causes, RC5, breaches_attributable]
 
 # For each planted cause, the catalogue actions that address it.
 remedies:
@@ -62,6 +84,7 @@ remedies:
   RC2: [enforce_broker_checklist]
   RC3: [retrain_team_b]
   RC4: [saturday_rota]
+  RC5: [activate_monsoon_survey_panel]
 
 # Answerable questions come from retrieval.yaml; these must be declined.
 unanswerable:

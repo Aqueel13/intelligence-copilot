@@ -68,11 +68,14 @@ counterfactual per case). Full detail in the [evaluation report](docs/evaluation
 
 | | Insurance claims | Procure-to-pay |
 |---|---|---|
-| Investigations (models × seeds × questions) | 36 (4 × 3 × 3) | 9 (local 7B × 3 × 3) |
-| Mean recall of planted causes | 79–100% by model; local 7B 100% | 100% |
+| Investigations (models × seeds × questions) | 36 (4 × 3 × 3; 30 completed, 6 refused by free-tier limits) | 9 (local 7B × 3 × 3) |
+| Mean recall of planted causes | 100% for every model, every completed run | 100% |
 | Decoys accepted as causes | **0** in every run | **0** in every run |
 | Policy Q&A: answers citing a relevant passage | 96% for every model | 100% |
 | What-if vs exact counterfactual | 0.51–0.99 of truth (understates) | 0.63–0.99 of truth (understates) |
+
+These results are on the earlier six-month datasets. The data now covers 18 months with a fifth
+planted cause and a new decoy per pack (`docs/PROJECT_BRIEF.md` §5, §5b); it has not been re-evaluated yet.
 
 Every miss was over-caution (a real cause left inconclusive), never a decoy accepted; the
 evaluation also found nine product defects, each fixed and re-measured

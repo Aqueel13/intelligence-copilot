@@ -54,7 +54,10 @@ from watchdog_backend.llm.gateway import max_concurrency
 from watchdog_backend.observability.context import traced
 
 MAX_SIGNALS_FOR_PLANNER = 12
-MAX_HYPOTHESES = 9  # planner proposes ≤ 6; coverage may add strong signals up to this
+# Planner proposes ≤ 6; coverage may add strong signals up to this. 9 left strong signals
+# out once a pack had five causes and three decoys (each decoy also raises strong signals).
+MAX_HYPOTHESES = 12
+MAX_CHECKS = 4  # per hypothesis, including checks merged in by the coverage rule
 COVERAGE_MIN_STRENGTH = 0.08  # only strong signals are auto-added if the planner skips them
 _CHECK = TypeAdapter(Check)
 
@@ -185,6 +188,15 @@ def _covers(h: Hypothesis, s: Signal) -> bool:
     return False
 
 
+def _same_segment(h: Hypothesis, s: Signal) -> bool:
+    """`h` tests the signal's segment (dimension and value), for any outcome."""
+    return s.kind == "segment" and any(
+        isinstance(c, SegmentCheck)
+        and (c.dimension, c.value) == (s.data["dimension"], s.data["value"])
+        for c in h.checks
+    )
+
+
 def _signal_checks(s: Signal) -> list[Check]:
     d = s.data
     if s.kind == "segment":
@@ -207,14 +219,27 @@ def apply_coverage(
     hypotheses = list(hypotheses)
     added = 0
     for sig in signals:
-        if len(hypotheses) >= MAX_HYPOTHESES:
-            break
         if sig.kind == "trend":
             continue
         low_sample = sig.kind == "segment" and sig.data.get("low_sample")
         weak = sig.strength < COVERAGE_MIN_STRENGTH
         if low_sample or weak or any(_covers(h, sig) for h in hypotheses):
             continue
+        # A hypothesis already about this segment (another outcome) takes the signal's check
+        # as more evidence, instead of a near-duplicate hypothesis using up a slot.
+        same = next((i for i, h in enumerate(hypotheses) if _same_segment(h, sig)), None)
+        if same is not None:
+            h = hypotheses[same]
+            if len(h.checks) < MAX_CHECKS:
+                hypotheses[same] = h.model_copy(
+                    update={
+                        "checks": [*h.checks, _signal_checks(sig)[0]],
+                        "signal_ids": [*h.signal_ids, sig.id],
+                    }
+                )
+            continue
+        if len(hypotheses) >= MAX_HYPOTHESES:
+            continue  # a later signal may still merge into an existing hypothesis
         hypotheses.append(
             Hypothesis(
                 id=f"H{len(hypotheses) + 1}",
@@ -453,6 +478,22 @@ def build_graph(deps: Deps):
                 "model_verdict": verdict,
                 "verdict": "inconclusive",
                 "override": "Only small, non-significant samples support it.",
+            }
+        elif (
+            verdict == "supported"
+            and segs
+            # segment comparisons are its only data evidence (policy text is not data)…
+            and not any(
+                e.ok and not isinstance(e.check, (SegmentCheck, PolicyCheck)) for e in h.evidence
+            )
+            # …and none of them shows a significant adverse difference
+            and not any(e.data.get("significant") and e.data.get("difference", 0) > 0 for e in segs)
+        ):
+            update |= {
+                "model_verdict": verdict,
+                "verdict": "inconclusive",
+                "override": "No comparison shows a significant difference in the stated "
+                "direction, so the data does not support it.",
             }
         # Upgrade rule A: a coverage hypothesis is worded by code from its own evidence, so if
         # that evidence meets the strict support criteria the verdict can be corrected safely.

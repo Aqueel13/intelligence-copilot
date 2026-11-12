@@ -71,3 +71,15 @@ monitors:
     min_sample: 100
     policy_ref: "AP-102 §5.2"
     question: Why does {segment} so often have to re-capture invoices?
+
+  paper_capture_wait:
+    title: Waiting time before invoice capture
+    metric: avg_wait_hours
+    filters: { activity: [Invoice Capture] }
+    group_by: invoice_channel
+    direction: above
+    warning: 36
+    critical: 72
+    min_sample: 50
+    policy_ref: "AP-104 §4"
+    question: Why do {segment} invoices wait so long before they are captured?

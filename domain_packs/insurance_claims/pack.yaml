@@ -70,7 +70,7 @@ activities:
 # What the investigation engine analyses.
 analysis:
   dimensions: [line_of_business, channel, region, team, amount_band]   # scanned for segment effects
-  controls: [amount_band, line_of_business, channel]                   # confounders for every segment effect
+  controls: [amount_band, line_of_business, channel, team]             # confounders for every segment effect
   outcomes:                       # loops compared across segments, besides `breached`
     doc_requested:
       label: additional-documents rate
@@ -82,7 +82,9 @@ analysis:
       mechanism: verification rework
       activity: Verification
       when: repeated
-  wait_targets: { Senior Approval: 24 }   # hours (POL-002 §5)
+  wait_targets:                   # hours
+    Senior Approval: 24           # POL-002 §5
+    Survey & Loss Assessment: 24  # SOP-103 §2.1: surveyor appointed within one working day
   late_handoff_hour: 15
 
 ui:
@@ -104,7 +106,9 @@ ui:
     - Why do health claims take longer than motor claims?
     - What is the SLA breach rate by channel?
     - Can senior approvals be delegated to team leads?
+    - Why do motor claims slow down in the monsoon months?
   knowledge_examples:
+    - What should happen when the surveyor network falls behind in the monsoon?
     - Who approves a claim of ₹3,00,000, and how fast?
     - Can senior approvals be delegated? Under what conditions?
     - What happens to work handed over late on a Friday?

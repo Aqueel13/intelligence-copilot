@@ -37,10 +37,12 @@ def test_events_are_chronological(dataset) -> None:
 
 
 def test_senior_approval_exactly_above_threshold(dataset, pack) -> None:
+    """POL-002 v2 lowered the threshold from ₹5L to ₹2L on 1 April 2026."""
     has_senior = dataset.events.query("activity == 'Senior Approval'")["case_id"].unique()
-    above = dataset.cases.loc[
-        dataset.cases["amount"] > pack.approval.senior_threshold_inr, "case_id"
-    ]
+    cases = dataset.cases
+    after = pd.to_datetime(cases["opened_at"]) >= pd.Timestamp("2026-04-01", tz="Asia/Kolkata")
+    threshold = after.map({True: pack.approval.senior_threshold_inr, False: 500_000})
+    above = cases.loc[cases["amount"] > threshold, "case_id"]
     assert set(has_senior) == set(above)
 
 
@@ -72,23 +74,48 @@ def test_calibration_breach_rates(dataset) -> None:
     assert s["breach_rate_without_any_planted_cause"] <= 0.15
 
 
-def test_rc1_is_the_largest_cause(dataset) -> None:
+def test_senior_queue_and_monsoon_are_the_largest_causes(dataset) -> None:
+    """Over 18 months the monsoon backlog (two seasons) and the senior queue (since April
+    2026) drive the most breaches; every cause is strong enough to detect."""
     shares = {c: v["share_of_breaches"] for c, v in dataset.summary()["root_causes"].items()}
-    assert shares["RC1"] >= 0.30
-    assert shares["RC1"] == max(shares.values())
+    assert set(sorted(shares, key=shares.get)[-2:]) == {"RC1", "RC5"}
     for cause in CAUSES:
         assert shares[cause] >= 0.03, f"{cause} is too weak to be detectable"
 
 
+def test_senior_queue_starts_with_the_threshold_change(dataset) -> None:
+    t = dataset.joined_truth()
+    after = pd.to_datetime(t["opened_at"]) >= pd.Timestamp("2026-04-01", tz="Asia/Kolkata")
+    assert not t.loc[~after, "RC1_triggered"].any()
+    assert t.loc[after, "breached"].mean() > t.loc[~after, "breached"].mean() + 0.1
+
+
+def test_monsoon_slows_motor_claims_only(dataset) -> None:
+    s = dataset.summary()["seasonality"]
+    assert s["motor_claims_per_month_monsoon"] > 1.4 * s["motor_claims_per_month_other"]
+    assert s["motor_breach_rate_monsoon"] > s["motor_breach_rate_other"] + 0.1
+    t = dataset.joined_truth()
+    assert (t.loc[t["RC5_triggered"], "line_of_business"] == "motor").all()
+
+
 def test_delegation_avoids_a_material_share_of_breaches(dataset) -> None:
-    assert dataset.summary()["delegation_scenario"]["share_of_breaches_avoided"] >= 0.2
+    # Only claims since April 2026 go through the understaffed queue.
+    assert dataset.summary()["delegation_scenario"]["share_of_breaches_avoided"] >= 0.1
 
 
-def test_dc1_health_equals_motor_within_band(dataset) -> None:
+def test_dc1_health_is_not_slower_within_band(dataset) -> None:
+    # Within an amount band health is never slower (motor is, if anything: the monsoon).
     for band, by_lob in dataset.summary()["decoys"]["DC1_mean_cycle_days_by_amount_band"].items():
         if band == "> ₹5L":  # too few motor claims for a tight comparison
             continue
-        assert by_lob["health"] == pytest.approx(by_lob["motor"], abs=0.3), band
+        assert by_lob["health"] <= by_lob["motor"] + 0.3, band
+
+
+def test_dc4_kolkata_is_explained_by_team_b(dataset) -> None:
+    dc4 = dataset.summary()["decoys"]["DC4_kolkata"]
+    assert dc4["team_b_share"] > 0.7 > 0.4 > dc4["team_b_share_other_regions"]
+    for team, rate in dc4["breach_rate_by_team_kolkata"].items():
+        assert rate == pytest.approx(dc4["breach_rate_by_team_other_regions"][team], abs=0.05)
 
 
 def test_dc3_respondents_understate_satisfaction(dataset) -> None:

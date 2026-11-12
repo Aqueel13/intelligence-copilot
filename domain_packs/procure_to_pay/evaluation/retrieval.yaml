@@ -53,3 +53,21 @@ questions:
     relevant: [{ doc: APR-301, section: "1. Who approves" }]
   - q: How long does a budget holder have to approve an invoice?
     relevant: [{ doc: APR-301, section: "2. Targets" }, { doc: AP-001, section: "4. Internal stage targets" }]
+  - q: Which suppliers are required to send e-invoices?
+    relevant: [{ doc: AP-104, section: "2. Legal background" }, { doc: AP-104, section: "3. Rule for suppliers" }]
+  - q: Why do paper invoices take so long before they are captured?
+    relevant: [{ doc: AP-104, section: "4. Paper invoice handling" }]
+  - q: Can a plant scan paper invoices itself instead of sending them to Pune?
+    relevant: [{ doc: AP-104, section: "4. Paper invoice handling" }]
+  - q: Are we returning paper invoices from suppliers who should e-invoice?
+    relevant: [{ doc: AP-104, section: "5. Enforcement and status" }]
+  - q: Why does the Sanand plant receive so many paper invoices?
+    relevant: [{ doc: REF-401, section: "2. Supplier base by plant" }]
+  - q: How do we stop the same invoice being paid twice?
+    relevant: [{ doc: AP-105, section: "2. Checks at capture" }, { doc: AP-105, section: "3. Checks before payment" }]
+  - q: What discount do suppliers give for early payment?
+    relevant: [{ doc: TRS-402, section: "2. Terms" }]
+  - q: How many more invoices arrive in March?
+    relevant: [{ doc: FIN-501, section: "2. Expected volumes" }]
+  - q: What is the cut-off date for accruing invoices at year end?
+    relevant: [{ doc: FIN-501, section: "3. Cut-offs" }]

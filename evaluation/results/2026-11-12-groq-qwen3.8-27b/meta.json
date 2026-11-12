@@ -1,0 +1,17 @@
+{
+  "started": "2026-11-12T11:32:20",
+  "database": "watchdog_eval_cloud",
+  "domain": "insurance_claims",
+  "models": [
+    "groq:qwen/qwen3.8-27b"
+  ],
+  "seeds": [
+    42,
+    7,
+    1234
+  ],
+  "suites": [
+    "investigation"
+  ],
+  "finished": "2026-11-12T11:51:49"
+}

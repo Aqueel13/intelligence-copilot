@@ -23,6 +23,12 @@ approvals:
   retrain_bpo_capture:
     roles: [AP Manager]
     basis: "AP-102 §5.3: the AP Manager owns the BPO quality plan"
+  enforce_e_invoicing:
+    roles: [AP Manager, Chief Financial Officer]
+    basis: "AP-104 §5: the AP Manager owns supplier invoicing rules; the CFO may decide"
+  scan_paper_invoices_at_plants:
+    roles: [AP Manager]
+    basis: "AP-104 §4: mailroom scanning is an AP procedure"
   restore_twice_weekly_runs:
     roles: [Treasury Head, Chief Financial Officer]
     basis: "TRS-401 §4.1: payment run changes need the Treasury Head or the CFO"

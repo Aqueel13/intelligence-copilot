@@ -1,7 +1,7 @@
 # Intelligence WatchDog — Project Brief
 
 > Working document. Records the decisions made so far and the agreed scope.
-> Last updated: 2026-11-12 (M8: cache, showcase, limits; Analytics/Knowledge MCP, exploratory SQL, auto-triage).
+> Last updated: 2026-11-12 (M8: cache, showcase, limits; MCP, exploratory SQL, auto-triage; 18-month data with new patterns).
 
 ## 1. One-liner
 
@@ -75,6 +75,8 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 | D50 | **Analytics and Knowledge MCP servers: read-only, own tokens, no LLM** | Analytics wraps the metrics engine, process mining, alerts, investigations and exploratory SQL, so a client gets the same numbers as the web app. Knowledge returns passages and documents, not answers: the client is a model and can read them, so the server spends no tokens. Each server accepts only its own tokens (a Knowledge token is refused by Analytics). Shared plumbing (token check, pack switching, transport) is in `mcp_servers/common.py`, which Operations now uses too. |
 | D51 | **Exploratory SQL: labelled, and sandboxed in layers** | D5's fallback. One SELECT over three views of the active pack (`cases`, `events`, `feedback`), typed or drafted by a model and always shown before it runs. Layers: validation (one statement; no comments, dollar quoting, backslashes, unbalanced parentheses or session/server functions), then a `watchdog_explorer` role that can only SELECT those views, in a READ ONLY transaction with a 5 s timeout, wrapped as a subquery (Postgres then rejects data-modifying CTEs), capped at 500 rows, on a connection that is closed afterwards. Results are marked "not a verified metric". Analysts and admins only; model drafts count against the question limit. |
 | D52 | **Automatic triage: rank, then investigate the top alert** | After monitors run (watcher schedule, "Run monitors", "Simulate next month"), open untriaged alerts are ranked: critical first, then distance past threshold, then age. The top one per pack per run is investigated as the system user with the alert's own question and scope; an identical earlier run is linked instead (free, and does not use up the run's slot); the shared daily investigation budget applies, and an alert over budget is marked skipped with the reason and reconsidered on later runs (a failed run is not retried automatically, and is never linked to the alert). Alerts are claimed with a conditional UPDATE so the watcher and the app never double-run one. `WATCH_AUTO_INVESTIGATE` = off, critical (default) or all. The first live run found that the watcher container could not reach the models (no model cache or Ollama route), recorded as "failed" on the alerts; fixed in compose. Two flaws found the same way and fixed: failed runs were linked to the alert (hiding the Investigate button), and skipped alerts were never retried. |
+| D53 | **18 months of data, with change points and seasonality** | 18,000 cases per pack (April 2025 – September 2026) instead of 5–6k over six months. A longer history is what makes time patterns testable: the insurance senior queue now starts when POL-002 v2 took effect (1 April 2026), so the documents and the data tell the same story; monsoon motor surges (insurance) and the March year-end rush (P2P) repeat or stand out. New per pack: one cause (monsoon surveyor backlog; paper-invoice capture delay, with an `invoice_channel` dimension) and one decoy explained by a different control (Kolkata → team; Sanand → invoice channel), plus five documents each. Dated statements in older documents were moved before the window where the data has no change point. New random draws are appended last, so every earlier per-case draw is unchanged. |
+| D54 | **Three engine refinements found by the new data** | (1) The month-by-month queue check (D42) correlates a queue's wait with the breach rate of the cases that pass through it: the April 2026 step elsewhere blurred the monsoon survey queue's link (r 0.76 → 0.96). (2) The coverage rule merges a signal into a hypothesis already about the same segment (another outcome) instead of a near-duplicate, and the cap rose from 9 to 12: with five causes and three decoys per pack, Chakan's signal was crowded out. (3) A symmetric downgrade: a "supported" hypothesis whose only data evidence is segment comparisons, none significant in the stated direction, becomes inconclusive (over 18 months health and motor breach alike, and the model still called "health is slower" supported). |
 
 ## 4. Product shape
 
@@ -108,10 +110,11 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 
 | ID | Root cause | How it shows in the data | Corroborating document |
 |----|-----------|--------------------------|------------------------|
-| RC1 | High-value claims (> ₹2L) wait for senior adjuster approval; the senior queue is understaffed | Long waiting time before `Senior Approval`; ~4 days (96h average) vs a 24h policy, worsening Apr → Sep | Approval matrix (senior sign-off above ₹2,00,000) + SLA policy (24h senior-approval target) |
+| RC1 | Since POL-002 v2 lowered the senior-approval threshold from ₹5L to ₹2L (1 April 2026), the senior queue is understaffed: the capacity plan still assumed ₹5L | Waiting before `Senior Approval` steps up in April 2026 (from ~15h to ~70h) and keeps rising; claims ₹2L–₹5L join the queue | POL-002 v1/v2, OPS-301 (capacity plan built on v1), POL-001 (24h target) |
 | RC2 | Broker-channel claims are often missing documents at intake | `Request Additional Documents` loop on ~20% of broker claims, adding ~2–3 days | Intake SOP requires a document checklist at FNOL |
 | RC3 | One verification team has a high QA rejection rate | Rework loop `Verification → QA → Verification` ~18% for Team B vs ~5% for others | QA SOP / verification guidelines |
 | RC4 | Handoffs late on Fridays sit idle over the weekend | Larger waiting time for cases handed off Friday after 15:00 | Working-hours policy (no weekend coverage) |
+| RC5 | Monsoon (July–September): motor claims rise ~60% and the surveyor network falls behind; the surge panel was never activated | Wait for a surveyor triples in both monsoons (~12h → ~39h); motor breach rate 42% in the monsoon vs 21% otherwise | OPS-302 (surge plan, not activated), SOP-103 (surveyor within one working day) |
 
 ### Decoys (test analytical rigour)
 
@@ -120,8 +123,11 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 | DC1 | "Health claims are slower" | Confounded by claim value: health claims skew high-value, so the real cause is RC1. |
 | DC2 | "The Pune region is underperforming" | Small sample; not statistically meaningful. |
 | DC3 | "Average CSAT is 2.9, so customers are broadly unhappy" | Response bias: dissatisfied customers respond more often. The raw average understates true satisfaction and must be reported with its sample caveat. |
+| DC4 | "Kolkata claims need more rework" | Four in five Kolkata claims go to Team B (REF-203 eastern hub); within the same team Kolkata is no different (RC3). |
 
-The evaluation checks that the system **finds RC1–RC4** and **does not report DC1–DC3 as conclusions**.
+The evaluation checks that the system **finds RC1–RC5** and **does not report DC1–DC4 as conclusions**. DC1 shows only since April 2026 (before the threshold change, and with monsoon motor delays, health and motor take about as long), so its benchmark question is scoped to that period.
+
+Seasonality: motor FNOLs run ~60% above normal from July to September (OPS-302 §2).
 
 ### Process flows (reimbursement claims; cashless pre-authorisation is out of v1)
 
@@ -142,23 +148,27 @@ Survey = IRDAI-licensed surveyor inspects the vehicle and files a loss assessmen
 - Data lands in M1. A feedback/theme-analysis tool for the agents comes in M4.
 
 ### Data volumes
-- ~5,000 claims, ~38,000 events, ~1,250 survey responses, 10–15 policy/SOP documents (generated, realistic, internally consistent with the planted causes).
+- 18,000 claims over 18 months (April 2025 – September 2026), ~136,000 events, ~4,300 survey responses, 20 policy/SOP/plan documents (generated, realistic, internally consistent with the planted causes). Until 12 November 2026: 5,000 claims over six months and 15 documents.
 
-### Calibrated ground truth (seed 42, M1)
+### Calibrated ground truth (seed 42; 18 months, recalibrated 2026-11-12)
 
 Computed by exact counterfactual: each claim is re-simulated with one cause switched off, using identical randomness. A breach is *attributable* to a cause if removing that cause alone would have met the SLA.
 
 | | Value |
 |---|---|
-| SLA breach rate | 31.0% (10.0% with no planted cause) |
-| RC1 senior approval queue | 40.4% of breaches · 1,239 claims affected |
-| RC2 broker missing documents | 8.0% of breaches · 274 claims |
-| RC3 Team B rework | 4.9% of breaches · 206 claims |
-| RC4 late-Friday handoffs | 6.4% of breaches · 847 claims |
-| Delegating ₹2L–₹5L approvals | avoids 33% of breaches |
-| DC1 | health ≈ motor within each amount band (e.g. 3.07 vs 3.16 days below ₹50K) |
-| DC2 | Pune: 58 claims, 66% broker (vs 30% elsewhere) |
-| DC3 | respondent CSAT 3.58 vs true 3.91; 25% response rate |
+| SLA breach rate | 26.3% (8.2% with no planted cause); 16% before April 2026, 30–47% after |
+| RC1 senior approval queue | 16.5% of breaches · 1,499 claims affected (all since April 2026) |
+| RC2 broker missing documents | 11.5% of breaches · 1,011 claims |
+| RC3 Team B rework | 8.0% of breaches · 874 claims |
+| RC4 late-Friday handoffs | 10.9% of breaches · 3,012 claims |
+| RC5 monsoon surveyor backlog | 20.6% of breaches · 4,528 claims |
+| Delegating ₹2L–₹5L approvals | avoids 13% of all breaches (only claims since April 2026 are affected) |
+| DC1 | since April 2026 health breaches 45% vs motor 34%; within each amount band health is not slower |
+| DC2 | Pune: 258 claims, 60% broker (vs 30% elsewhere) |
+| DC3 | respondent CSAT 3.77 vs true 4.03; 24% response rate |
+| DC4 | Kolkata: 80% Team B (vs 33% elsewhere); rework 14.4% vs 9.0%, the same within each team |
+
+Stable across seeds 7 and 1234 (breach rate 25.7–26.3%; each cause within two points).
 
 Calibration ranges are enforced by tests, so a generator change that weakens the story fails CI.
 
@@ -166,24 +176,29 @@ Calibration ranges are enforced by tests, so a generator change that weakens the
 
 > "Why are invoices missing the ten-day payment target? Find the root causes and recommend corrective actions."
 
-Varaha Auto Components (fictional), five plants, 6,000 supplier invoices over six months. One
+Varaha Auto Components (fictional), five plants, 18,000 supplier invoices over 18 months (April 2025 – September 2026; 13 documents). One
 case is one invoice, from receipt to payment release; the target is 10 calendar days (early-
 payment discounts; well inside the MSMED Act limits for small suppliers).
 
 | ID | Root cause | How it shows in the data | Corroborating document |
 |----|-----------|--------------------------|------------------------|
-| RC1 | Chakan's stores post goods receipts late (one GRN clerk short since March) | More invoices reach matching before their GRN, and wait ~5–6 days for it | WH-201 (GRN within 1 working day; Chakan staffing) |
+| RC1 | Chakan's stores post goods receipts late (one GRN clerk short since March 2025) | More invoices reach matching before their GRN, and wait ~5–6 days for it | WH-201 (GRN within 1 working day; Chakan staffing) |
 | RC2 | Free-text POs have no agreed price | Price exceptions on ~55% of free-text invoices vs ~5% otherwise | PRC-101 (free-text rules), AP-103 (tolerance) |
 | RC3 | The BPO Partner's capture errors | Re-capture loop on ~40% of BPO-captured invoices vs ~4% in-house | AP-102 (97% first-time-right; BPO quality plan) |
-| RC4 | Treasury suspended the Tuesday payment run from 1 July | Wait before `Payment Run` rises from ~54h to ~78h; breach rate steps up in July | TRS-401 (twice-weekly calendar; change log) |
+| RC4 | Treasury suspended the Tuesday payment run from 1 July 2026 | Wait before `Payment Run` rises from ~54h to ~80h; breach rate steps up in July 2026 | TRS-401 (twice-weekly calendar; change log) |
+| RC5 | Paper invoices go via the plant mailroom and a weekly courier to central scanning; e-invoicing is not enforced | ~3 extra working days before capture; paper invoices breach 61% vs 27% | AP-104 (e-invoicing rule, not enforced; plant scanning alternative) |
 
 | ID | Looks like | Actually |
 |----|-----------|----------|
 | DC1 | "IT and professional services invoices are slow" | They are mostly free-text POs (RC2); within the same PO type they are not slower. |
-| DC2 | "MSME suppliers are paid late" | Their paper invoices mostly go to the BPO Partner (RC3); within the same AP team they are not slower. |
+| DC2 | "MSME suppliers are paid late" | Their invoices mostly go to the BPO Partner (RC3); within the same AP team they are not slower. |
+| DC3 | "The Sanand plant pays late" | Three in five Sanand invoices are on paper (local job-work suppliers, REF-401); within the same invoice channel Sanand is not slower (RC5). |
 
-Calibrated ground truth (seed 42): breach rate 30.7% (8.3% without any planted cause); share of
-breaches attributable to RC1 12%, RC2 23%, RC3 20%, RC4 18%. Stable across seeds 7 and 1234.
+Seasonality: invoices in March run ~40% above a normal month (fiscal year-end, FIN-501).
+
+Calibrated ground truth (seed 42): breach rate 33.5% (8.1% without any planted cause); share of
+breaches attributable to RC1 10%, RC2 20%, RC3 18%, RC4 6% (last three months only), RC5 21%.
+Stable across seeds 7 and 1234 (breach rate 32.7–33.7%).
 
 ## 6. Architecture (prototype)
 
@@ -306,11 +321,11 @@ Closed loop on the dev data: delegation and Team B retraining were executed in M
 | Model | Investigations completed | Mean recall | Decoys accepted | Model's own citation accuracy |
 |---|---|---|---|---|
 | `ollama:qwen2.5:7b` (local, free) | 9/9 | 100% | 0 | 75% |
-| `groq:openai/gpt-oss-20b` | 7/9 | 100% | 0 | 69% |
-| `groq:qwen/qwen3.8-27b` | 9/9 | 97% | 0 | 97% |
-| `groq:openai/gpt-oss-120b` | 6/9 | 79% | 0 | 73% |
+| `groq:openai/gpt-oss-120b` | 9/9 | 100% (79% before D37) | 0 | 73% |
+| `groq:openai/gpt-oss-20b` | 8/9 | 100% | 0 | 69% |
+| `groq:qwen/qwen3.8-27b` | 4/9 | 100% | 0 | 97% |
 
-No model accepted a decoy in any run. Every miss was over-caution (a supported cause left inconclusive or wrongly refuted); D37 now addresses it with code-worded upgrades. Unverified numbers in summaries: 0 across all completed runs. Pending: re-run the cloud models' broker question (predates a what-if fix) and the five quota-refused runs.
+Cloud rows are the 2026-11-12 re-run under D37 (all 3 seeds × 3 questions). No model accepted a decoy in any run, and every completed run found every planted cause: the over-caution that cost the 120B model 21 points is gone. Unverified numbers in summaries: 0. Six runs were refused by Groq's free tier (one daily quota, five "request too large" on qwen3.8-27b's per-minute cap), reported separately, not as failures. These results are on the six-month datasets; the 18-month data (2026-11-12) has new causes and decoys and has not been evaluated yet.
 
 ### M8 results so far (2026-11-10): second domain pack
 
@@ -328,7 +343,7 @@ of them. Insurance results unchanged (all 165 earlier tests pass; 26 new P2P tes
 Accounts and two-layer RBAC (D43, D44), built-in observability (D45), the policy-answer cache
 (D46), a light model tier (D47), the investigation cache with showcase replay (D48) and rate
 limits (D49), the Analytics and Knowledge MCP servers (D50), exploratory SQL (D51) and
-automatic triage of alerts (D52). 248 backend tests pass.
+automatic triage of alerts (D52), then 18-month data with new patterns (D53, D54). 258 backend tests pass.
 
 Remaining M8: public deployment (hosting, HTTPS, GitHub sign-in) and the video. Everything the
 deployment needs from the app itself (showcase runs, limits, secure cookies) is in place.

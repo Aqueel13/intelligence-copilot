@@ -46,6 +46,10 @@ dimensions:
     label: Supplier size
     source: attribute
     values: [MSME, Large]
+  - name: invoice_channel
+    label: Invoice channel
+    source: attribute
+    values: [e_invoice, email_pdf, paper]
   - name: amount_band
     label: Invoice amount band
     source: amount_band
@@ -70,8 +74,8 @@ activities:
   - { name: Payment Released }
 
 analysis:
-  dimensions: [plant, category, po_type, ap_team, vendor_size, amount_band]
-  controls: [po_type, ap_team, amount_band]
+  dimensions: [plant, category, po_type, ap_team, vendor_size, invoice_channel, amount_band]
+  controls: [po_type, ap_team, invoice_channel, amount_band]
   outcomes:
     price_exception:
       label: price-exception rate
@@ -104,14 +108,16 @@ ui:
       - { metric: price_exception_rate, label: Price exceptions, note: Invoice price outside PO tolerance at least once }
       - { metric: recapture_rate, label: Invoice re-capture, note: Capture errors sent back from matching }
       - { metric: grn_pending_rate, label: Goods receipt pending, note: No GRN posted when the invoice reached matching }
-    breakdown_dimensions: { plant: Plant, category: Category, po_type: PO type, ap_team: AP team, vendor_size: Supplier size, amount_band: Amount }
+    breakdown_dimensions: { plant: Plant, category: Category, po_type: PO type, ap_team: AP team, vendor_size: Supplier size, invoice_channel: Invoice channel, amount_band: Amount }
     breakdown_metrics: { sla_breach_rate: SLA breach rate, avg_cycle_days: Cycle time, price_exception_rate: Price exceptions, recapture_rate: Re-capture, grn_pending_rate: GRN pending }
   investigate_examples:
     - Why are invoices missing the ten-day payment target? Find the root causes and recommend corrective actions.
     - Why do IT services invoices take longer than other categories?
     - Why are MSME suppliers' invoices paid late?
     - What is the price-exception rate by PO type?
+    - Why are invoices from the Sanand plant paid late?
   knowledge_examples:
+    - Which suppliers must send e-invoices, and what happens to paper invoices?
     - When do we have to pay MSME suppliers?
     - How often do payment runs happen, and what is the cutoff?
     - When is a free-text purchase order allowed?

@@ -26,7 +26,7 @@ This plan was prepared in February 2026 using FY2025-26 volumes and the **Approv
 | Role | Headcount (FTE) | Notes |
 |---|---|---|
 | Intake Desk | 4 | FNOL and document check |
-| Verification Teams A, B, C | 5 each | Team B includes 3 staff hired in Q4 FY2025-26 |
+| Verification Teams A, B, C | 5 each | Team B includes 3 staff hired in Q4 FY2024-25, still on reduced QA sampling |
 | QA Desk | 3 | |
 | Senior Adjusters | **2** | Also responsible for large-loss handling, litigation support and audits |
 | Finance Ops (settlement) | 2 | |

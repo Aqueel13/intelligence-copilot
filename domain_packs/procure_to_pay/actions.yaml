@@ -81,6 +81,41 @@ actions:
     operation: { type: schedule_training,
                  params: { team: BPO Partner, programme: Invoice capture accuracy } }
 
+  enforce_e_invoicing:
+    title: Enforce e-invoicing for suppliers above the GST threshold
+    description: >
+      Apply AP-104: suppliers required to issue GST e-invoices must submit them through the
+      supplier portal; paper invoices from them are returned. Onboard Sanand's local suppliers
+      to the portal first.
+    policy_refs: ["AP-104 §3", "AP-104 §5"]
+    effort: medium
+    lever: { kind: cap_wait, activity: Invoice Capture, target_hours: 24,
+             filters: { invoice_channel: [paper] } }
+    annual_cost:
+      basis: Supplier onboarding drive and portal support (one-off, spread over a year)
+      fixed_inr: 350000
+    follow_up: { metric: avg_wait_hours, expect: below, target: 24,
+                 filters: { activity: [Invoice Capture], invoice_channel: [paper] } }
+    operation: { type: create_change_request,
+                 params: { system: Supplier portal, change: Reject paper invoices from e-invoicing suppliers } }
+
+  scan_paper_invoices_at_plants:
+    title: Scan paper invoices at the plant gate
+    description: >
+      Scan paper invoices at each plant's mailroom on the day they arrive, instead of sending
+      them by the weekly courier to central scanning (AP-104 §4 alternative).
+    policy_refs: ["AP-104 §4"]
+    effort: low
+    lever: { kind: cap_wait, activity: Invoice Capture, target_hours: 24,
+             filters: { invoice_channel: [paper] } }
+    annual_cost:
+      basis: Five document scanners and 1 hour a day of mailroom time per plant
+      fixed_inr: 420000
+    follow_up: { metric: avg_wait_hours, expect: below, target: 24,
+                 filters: { activity: [Invoice Capture], invoice_channel: [paper] } }
+    operation: { type: create_change_request,
+                 params: { system: Plant mailrooms, change: Same-day scanning of paper invoices } }
+
   restore_twice_weekly_runs:
     title: Restore the Tuesday payment run
     description: >

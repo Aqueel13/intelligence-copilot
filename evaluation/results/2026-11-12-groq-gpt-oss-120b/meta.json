@@ -1,0 +1,17 @@
+{
+  "started": "2026-11-12T10:49:06",
+  "database": "watchdog_eval_cloud",
+  "domain": "insurance_claims",
+  "models": [
+    "groq:openai/gpt-oss-120b"
+  ],
+  "seeds": [
+    42,
+    7,
+    1234
+  ],
+  "suites": [
+    "investigation"
+  ],
+  "finished": "2026-11-12T11:08:01"
+}

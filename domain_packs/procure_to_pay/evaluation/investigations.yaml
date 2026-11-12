@@ -5,8 +5,8 @@ questions:
   - id: p2p_root_causes
     question: Why are invoices missing the ten-day payment target? Find the root causes and recommend corrective actions.
     scope: {}
-    expect_found: [RC1, RC2, RC3, RC4]
-    decoys: [DC1, DC2]
+    expect_found: [RC1, RC2, RC3, RC4, RC5]
+    decoys: [DC1, DC2, DC3]
 
   - id: services_slow
     # Decoy bait: the honest answer is "free-text POs", not the services themselves.
@@ -21,6 +21,13 @@ questions:
     scope: { filters: { vendor_size: [MSME] } }
     expect_found: [RC3]
     decoys: [DC2]
+
+  - id: sanand_late
+    # Decoy bait: the plant is not the cause; its suppliers mostly send paper invoices.
+    question: Why are invoices from the Sanand plant paid late?
+    scope: {}
+    expect_found: [RC5]
+    decoys: [DC3]
 
 ground_truth:
   RC1:
@@ -37,18 +44,25 @@ ground_truth:
   RC4:
     label: Weekly payment run
     targets: [{ check: activity_wait, activity: Payment Run }]
+  RC5:
+    label: Paper invoices wait for capture
+    targets: [{ check: segment, dimension: invoice_channel, values: [paper] }]
   DC1:
     label: Services look slow (it is free-text POs)
     targets: [{ check: segment, dimension: category, values: [IT services, Professional services] }]
   DC2:
     label: MSME looks slow (it is BPO capture)
     targets: [{ check: segment, dimension: vendor_size, values: [MSME] }]
+  DC3:
+    label: Sanand looks worse (it is paper invoices)
+    targets: [{ check: segment, dimension: plant, values: [Sanand] }]
 
 remedies:
   RC1: [chakan_grn_discipline, add_chakan_stores_clerk]
   RC2: [enforce_catalogue_buying]
   RC3: [retrain_bpo_capture]
   RC4: [restore_twice_weekly_runs]
+  RC5: [enforce_e_invoicing, scan_paper_invoices_at_plants]
 
 whatif_truth:
   chakan_grn_discipline: [root_causes, RC1, breaches_attributable]
@@ -56,6 +70,8 @@ whatif_truth:
   enforce_catalogue_buying: [root_causes, RC2, breaches_attributable]
   retrain_bpo_capture: [root_causes, RC3, breaches_attributable]
   restore_twice_weekly_runs: [root_causes, RC4, breaches_attributable]
+  enforce_e_invoicing: [root_causes, RC5, breaches_attributable]
+  scan_paper_invoices_at_plants: [root_causes, RC5, breaches_attributable]
 
 unanswerable:
   - What is our policy for paying foreign suppliers in US dollars?

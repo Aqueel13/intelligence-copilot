@@ -37,7 +37,7 @@ def _insurance() -> GeneratorSpec:
         )
         return m.InsuranceClaimsGenerator(pack, cfg).generate()
 
-    return GeneratorSpec(build, 5000, 833, m.ACTION_EFFECTS)
+    return GeneratorSpec(build, m.GeneratorConfig.n_claims, 1000, m.ACTION_EFFECTS)
 
 
 def _procure_to_pay() -> GeneratorSpec:

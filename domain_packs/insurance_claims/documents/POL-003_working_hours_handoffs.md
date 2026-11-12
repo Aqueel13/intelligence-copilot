@@ -30,7 +30,7 @@ Kestrel General Insurance Co. Ltd. (fictional)
 
 3.1 With approval of the Chief Operating Officer, a **Saturday half-day rota (09:00–13:00)** may be activated for the Verification Teams, QA Desk and Finance Ops to clear Friday handoffs.
 
-3.2 The rota has not been activated in FY2026-27.
+3.2 The rota has not been activated since it was introduced in FY2024-25.
 
 ## 4. Public holidays
 

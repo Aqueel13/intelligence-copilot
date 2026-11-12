@@ -16,12 +16,17 @@ Planted causes:
        they wait days for one
   RC2  Free-text (non-catalogue, non-contract) POs cause price exceptions
   RC3  The BPO Partner's invoice capture has a high error rate (re-capture loops)
-  RC4  Since 1 July treasury runs payments weekly (Fridays) instead of twice weekly
+  RC4  Since 1 July 2026 treasury runs payments weekly (Fridays) instead of twice weekly
+  RC5  Paper invoices go through the plant mailroom and a weekly courier to central scanning,
+       so they wait days before capture (AP-104 asks suppliers to e-invoice; not enforced)
 Decoys:
   DC1  IT and professional services look slow, but only because they are mostly free-text
        POs (→ RC2)
-  DC2  MSME suppliers look worse served, but only because their (paper) invoices mostly go to
-       the BPO Partner (→ RC3)
+  DC2  MSME suppliers look worse served, but only because their invoices mostly go to the BPO
+       Partner (→ RC3)
+  DC3  Sanand looks worse, but only because its local suppliers mostly send paper invoices
+       (→ RC5)
+Seasonality: invoice volume rises in March (fiscal year-end: suppliers bill before the close).
 """
 
 from dataclasses import dataclass, field
@@ -42,7 +47,7 @@ from watchdog_backend.generator.common import (
     lognormal,
 )
 
-CAUSES = ("RC1", "RC2", "RC3", "RC4")
+CAUSES = ("RC1", "RC2", "RC3", "RC4", "RC5")
 NO_CAUSES: frozenset[str] = frozenset()
 ALL_CAUSES: frozenset[str] = frozenset(CAUSES)
 MAX_RECAPTURES = 2
@@ -57,14 +62,16 @@ ACTION_EFFECTS: dict[str, dict[str, object]] = {
     "enforce_catalogue_buying": {"price_exception_free_text_total": 0.05},  # = the base rate
     "retrain_bpo_capture": {"capture_error_bpo_total": 0.04},  # = the base rate
     "restore_twice_weekly_runs": {"rc4_enabled": False},
+    "enforce_e_invoicing": {"rc5_enabled": False},
+    "scan_paper_invoices_at_plants": {"rc5_enabled": False},
 }
 
 
 @dataclass(frozen=True)
 class GeneratorConfig:
-    n_invoices: int = 6000
+    n_invoices: int = 18000
     seed: int = 42
-    start: date = date(2026, 4, 1)
+    start: date = date(2025, 4, 1)
     end: date = date(2026, 9, 30)
     window_start: date | None = None
     window_end: date | None = None
@@ -137,6 +144,18 @@ class GeneratorConfig:
             "Professional services": 180_000,
         }
     )
+    # RC5 / DC3: how invoices arrive. Sanand's local job-work suppliers mostly send paper.
+    channel_weights: dict[str, float] = field(
+        default_factory=lambda: {"e_invoice": 0.48, "email_pdf": 0.42, "paper": 0.10}
+    )
+    sanand_channel_weights: dict[str, float] = field(
+        default_factory=lambda: {"e_invoice": 0.15, "email_pdf": 0.25, "paper": 0.60}
+    )
+    rc5_enabled: bool = True
+    rc5_extra_wait_median_h: float = 22.0  # working hours: mailroom, courier, scanning batch
+    # Seasonality: invoices per day in March vs the rest of the year
+    march_volume_factor: float = 1.4
+
     amount_sigma: float = 1.0
     amount_floor: float = 2_000
     amount_cap: float = 15_000_000
@@ -188,6 +207,8 @@ class Draws:
         self.pe_wait, self.pe_work = z(MAX_PRICE_EXCEPTIONS), z(MAX_PRICE_EXCEPTIONS)
         self.appr_wait, self.appr_work, self.fc_wait, self.fc_work = z(4)
         self.pay_work = u()
+        # Added with RC5/DC3; drawn last, so every earlier draw is unchanged.
+        self.channel, self.paper_extra = u(), z()
 
 
 @dataclass(frozen=True)
@@ -198,6 +219,7 @@ class InvoiceProfile:
     po_type: str
     vendor_size: str
     ap_team: str
+    invoice_channel: str
     amount: float
     received_at: datetime
     month_index: int
@@ -212,6 +234,18 @@ class ProcureToPayGenerator:
         )
         self.tz = ZoneInfo(pack.case.timezone)
         self.sla_hours = pack.sla.target_hours
+        self._days: np.ndarray | None = None
+
+    def _day(self, u: float) -> date:
+        """A receipt date in the generation window, with the March year-end rush."""
+        c = self.cfg
+        w_start, w_end = c.window_start or c.start, c.window_end or c.end
+        if self._days is None:
+            days = [w_start + timedelta(days=k) for k in range((w_end - w_start).days + 1)]
+            w = np.array([c.march_volume_factor if d.month == 3 else 1.0 for d in days])
+            self._days = np.cumsum(w) / w.sum()
+        idx = int(np.searchsorted(self._days, u, side="right"))
+        return w_start + timedelta(days=min(idx, (w_end - w_start).days))
 
     # ------------------------------------------------------------------ profile
 
@@ -236,9 +270,8 @@ class ProcureToPayGenerator:
             )
         )
 
-        w_start, w_end = c.window_start or c.start, c.window_end or c.end
-        n_days = (w_end - w_start).days + 1
-        day = w_start + timedelta(days=int(d.recv_day * n_days))
+        w_end = c.window_end or c.end
+        day = self._day(d.recv_day)
         if d.recv_mode < 0.7:  # email / paper invoices are logged in working hours
             while day.weekday() not in self.cal.workdays:
                 day = day + timedelta(days=1) if day < w_end else day - timedelta(days=3)
@@ -257,6 +290,9 @@ class ProcureToPayGenerator:
             po_type=po_type,
             vendor_size=size,
             ap_team=team,
+            invoice_channel=choose(
+                c.sanand_channel_weights if plant == "Sanand" else c.channel_weights, d.channel
+            ),
             amount=float(amount),
             received_at=received,
             month_index=month_index,
@@ -310,12 +346,12 @@ class ProcureToPayGenerator:
 
         # Capture, and re-capture when matching finds a data-entry error (RC3)
         bpo_extra = (c.capture_error_bpo_total - c.capture_error_base) / (1 - c.capture_error_base)
-        work_step(
-            "Invoice Capture",
-            p.ap_team,
-            lognormal(5.0, 0.7, d.cap_wait[0]),
-            lognormal(0.25, 0.4, d.cap_work[0]),
-        )
+        capture_wait = lognormal(5.0, 0.7, d.cap_wait[0])
+        # RC5: paper goes via the plant mailroom and the weekly courier to central scanning
+        if p.invoice_channel == "paper" and c.rc5_enabled and "RC5" not in disabled:
+            capture_wait += lognormal(c.rc5_extra_wait_median_h, 0.5, d.paper_extra)
+            triggered.add("RC5")
+        work_step("Invoice Capture", p.ap_team, capture_wait, lognormal(0.25, 0.4, d.cap_work[0]))
         match()
         for k in range(MAX_RECAPTURES):
             factor = c.capture_error_repeat_factor**k
@@ -433,6 +469,7 @@ class ProcureToPayGenerator:
                         "po_type": p.po_type,
                         "ap_team": p.ap_team,
                         "vendor_size": p.vendor_size,
+                        "invoice_channel": p.invoice_channel,
                     },
                 }
             )
@@ -487,6 +524,8 @@ class ProcureToPayDataset(GeneratedDataset):
             }
 
         services = t["category"].isin(["IT services", "Professional services"])
+        sanand = t["plant"] == "Sanand"
+        march = pd.to_datetime(t["opened_at"]).dt.month == 3
         msme = t["vendor_size"] == "MSME"
         months = t.assign(month=pd.to_datetime(t["opened_at"]).dt.strftime("%Y-%m"))
         return {
@@ -501,6 +540,12 @@ class ProcureToPayDataset(GeneratedDataset):
             ),
             "root_causes": self.root_causes(t),
             "breach_rate_by_month": within(months, "month"),
+            "seasonality": {
+                "invoices_by_month": {
+                    str(k): int(v) for k, v in months.groupby("month").size().items()
+                },
+                "march_share_of_invoices": round(float(march.mean()), 3),
+            },
             "decoys": {
                 "DC1_services": {
                     "breach_rate": rate(t[services]),
@@ -510,6 +555,18 @@ class ProcureToPayDataset(GeneratedDataset):
                     ),
                     "breach_rate_by_po_type_services": within(t[services], "po_type"),
                     "breach_rate_by_po_type_other": within(t[~services], "po_type"),
+                },
+                "DC3_sanand": {
+                    "breach_rate": rate(t[sanand]),
+                    "breach_rate_other_plants": rate(t[~sanand]),
+                    "paper_share": round(
+                        float((t.loc[sanand, "invoice_channel"] == "paper").mean()), 3
+                    ),
+                    "paper_share_other_plants": round(
+                        float((t.loc[~sanand, "invoice_channel"] == "paper").mean()), 3
+                    ),
+                    "breach_rate_by_channel_sanand": within(t[sanand], "invoice_channel"),
+                    "breach_rate_by_channel_other": within(t[~sanand], "invoice_channel"),
                 },
                 "DC2_msme": {
                     "breach_rate": rate(t[msme]),

@@ -61,3 +61,23 @@ questions:
     relevant: [{ doc: POL-004, section: "1. Claim-level escalation" }]
   - q: Do health claims take longer to adjudicate than motor claims to survey?
     relevant: [{ doc: SOP-104, section: "4. Claim value" }]
+  - q: How much do motor claim volumes rise during the monsoon?
+    relevant: [{ doc: OPS-302, section: "2. Expected volumes" }]
+  - q: When should we bring in extra surveyors during the rains?
+    relevant: [{ doc: OPS-302, section: "3. Surge panel" }]
+  - q: Who can switch on the monsoon surveyor panel and what does it cost?
+    relevant: [{ doc: OPS-302, section: "4. Authority and cost" }]
+  - q: Was the surge panel used last monsoon?
+    relevant: [{ doc: OPS-302, section: "5. Status" }]
+  - q: Which verification team handles Kolkata claims?
+    relevant: [{ doc: REF-203, section: "3. Eastern hub exception" }]
+  - q: How are claims assigned to verification teams?
+    relevant: [{ doc: REF-203, section: "2. Default allocation" }]
+  - q: When must a claim be referred to the special investigations unit?
+    relevant: [{ doc: POL-006, section: "2. Red flags" }]
+  - q: Do claims under fraud investigation count towards the turnaround SLA?
+    relevant: [{ doc: POL-006, section: "3. Handling of referred claims" }]
+  - q: When is a flood-damaged car treated as a total loss?
+    relevant: [{ doc: SOP-107, section: "1. When a vehicle is a total loss" }]
+  - q: How quickly must we resolve a customer complaint?
+    relevant: [{ doc: POL-007, section: "2. Timelines" }]

@@ -57,7 +57,7 @@ an enterprise buyer:
   hash-chained audit entry. After execution the monitor tracks the action's follow-up metric.
 
 Two processes run side by side on the same engine: **insurance claims** (motor and health,
-5,000 claims) and **procure-to-pay** (invoice-to-pay at a five-plant manufacturer, 6,000
+18,000 claims over 18 months) and **procure-to-pay** (invoice-to-pay at a five-plant manufacturer, 18,000
 invoices). A switcher in the UI moves between them.
 
 ## 3. Design decisions that matter to a buyer

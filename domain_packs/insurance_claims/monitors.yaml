@@ -32,6 +32,17 @@ monitors:
     policy_ref: "POL-002 §5"
     question: Why are claims waiting so long for Senior Approval, and what should we do about it?
 
+  survey_wait:
+    title: Waiting time for a surveyor (motor)
+    metric: avg_wait_hours
+    filters: { activity: [Survey & Loss Assessment] }
+    direction: above
+    warning: 24
+    critical: 36
+    min_sample: 30
+    policy_ref: "SOP-103 §2.1"
+    question: Why are motor claims waiting so long for a surveyor, and what should we do about it?
+
   documents_requested:
     title: Additional documents requested
     metric: doc_request_rate

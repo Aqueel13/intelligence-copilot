@@ -51,12 +51,10 @@ class ScriptedModel:
 PLAN = llm.PlanOut(
     hypotheses=[
         llm.HypothesisOut(
-            statement="Health claims breach more because health processing is slower.",
+            statement="Kolkata claims need more rework because the region's claims are harder.",
             checks=[
-                llm.CheckOut(
-                    type="segment", dimension="line_of_business", value="health", outcome="breached"
-                ),
-                llm.CheckOut(type="policy", query="health claim adjudication time"),
+                llm.CheckOut(type="segment", dimension="region", value="Kolkata", outcome="rework"),
+                llm.CheckOut(type="policy", query="allocation of claims to verification teams"),
             ],
         ),
         llm.HypothesisOut(
@@ -89,8 +87,8 @@ PICKS = llm.RecommendOut(
         llm.SelectionOut(action_id="invent_a_robot", hypothesis_ids=["H1"], rationale="?"),
     ]
 )
-SUMMARY_BAD = "Breaches fell by 42% after hiring 7 robots."
-SUMMARY_GOOD = "The SLA breach rate is 31.0% across 5000 claims."
+SUMMARY_BAD = "Breaches fell by 97% after hiring 613 robots."
+SUMMARY_GOOD = "The SLA breach rate is 26.3% across 18000 claims."
 
 
 def _model(planner=PLAN) -> ScriptedModel:
@@ -130,9 +128,26 @@ def _h(result, needle: str):
 
 
 def test_confounded_hypothesis_is_overridden(result) -> None:
-    health = _h(result, "Health claims")
-    assert health.model_verdict == "supported" and health.verdict == "refuted"
-    assert "amount_band" in health.override
+    kolkata = _h(result, "Kolkata claims")
+    assert kolkata.model_verdict == "supported" and kolkata.verdict == "refuted"
+    assert "team" in kolkata.override  # DC4: it is Team B, not the region
+
+
+def test_supported_without_a_significant_difference_is_downgraded(db_engine, pack, kb) -> None:
+    # Over all 18 months health and motor breach alike (DC1 only shows since April 2026).
+    health_h = llm.HypothesisOut(
+        statement="Health claims breach more because health processing is slower.",
+        checks=[
+            llm.CheckOut(
+                type="segment", dimension="line_of_business", value="health", outcome="breached"
+            ),
+            llm.CheckOut(type="policy", query="health claim adjudication time"),
+        ],
+    )
+    plan = llm.PlanOut(hypotheses=[health_h, *PLAN.hypotheses[1:]])
+    health = _h(_run(db_engine, pack, _model(planner=plan)), "Health claims")
+    assert health.model_verdict == "supported" and health.verdict == "inconclusive"
+    assert "significant" in health.override
 
 
 def test_unconfounded_hypotheses_stay_supported(result) -> None:
@@ -179,7 +194,7 @@ def test_summary_with_invented_numbers_is_rewritten(result) -> None:
 def test_score_against_ground_truth(result) -> None:
     s = score(result["hypotheses"], pack_ground_truth())
     assert s.found["RC1"] and s.found["RC3"]
-    assert not s.decoys_accepted["DC1"]  # the override prevented accepting the decoy
+    assert not s.decoys_accepted["DC4"]  # the override prevented accepting the decoy
 
 
 def test_planner_failure_falls_back_to_signals(db_engine, pack, kb) -> None:
@@ -237,7 +252,7 @@ def test_stream_and_fetch_investigation(db_engine, kb, monkeypatch, client_as) -
     inv_id = events[0][1]["id"]
     record = client.get(f"/api/investigations/{inv_id}").json()
     assert record["status"] == "completed"
-    assert record["result"]["overview"]["cases"] < 5000  # the broker scope was applied
+    assert record["result"]["overview"]["cases"] < 18000  # the broker scope was applied
     assert any(r["investigation_id"] == inv_id for r in client.get("/api/investigations").json())
 
 
@@ -355,7 +370,7 @@ def test_rule_b_adds_separate_findings_never_the_decoy(timid_result) -> None:
     assert confirmed
     assert all(h.verdict == "supported" and h.override for h in confirmed)
     keys = {(e.check.type, getattr(e.check, "value", None)) for h in confirmed for e in h.evidence}
-    assert ("segment", "health") not in keys  # confounded: never confirmed
+    assert ("segment", "Kolkata") not in keys  # confounded: never confirmed
     assert ("activity_wait", None) in keys or any(
         getattr(e.check, "activity", None) == "Senior Approval"
         for h in confirmed
@@ -366,7 +381,7 @@ def test_rule_b_adds_separate_findings_never_the_decoy(timid_result) -> None:
 def test_refuting_model_cannot_suppress_strong_evidence(db_engine, pack, kb) -> None:
     s = score(_run(db_engine, pack, _timid("refuted"))["hypotheses"], pack_ground_truth())
     assert s.found["RC1"] and s.found["RC3"]
-    assert not s.decoys_accepted["DC1"]
+    assert not any(s.decoys_accepted.values())
 
 
 def test_assessment_runs_in_parallel(db_engine, pack, kb, monkeypatch) -> None:

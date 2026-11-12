@@ -1,5 +1,7 @@
 """Process mining: exact against pandas, and the planted story is visible in the process."""
 
+from datetime import date
+
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
@@ -86,18 +88,21 @@ def test_variant_counts_match_pandas(analyzer, conn, dataset) -> None:
 
 
 def test_senior_approval_variants_breach_far_more(analyzer, conn) -> None:
-    variants = analyzer.variants(conn, ProcessQuery(), top=4).variants
+    # Health claims since the ₹2L threshold (April 2026): no monsoon survey backlog to blur it.
+    scope = ProcessQuery(filters={"line_of_business": ["health"]}, period_from=date(2026, 4, 1))
+    variants = analyzer.variants(conn, scope, top=4).variants
     with_senior = [v for v in variants if "Senior Approval" in v.activities]
     without = [v for v in variants if "Senior Approval" not in v.activities]
     assert with_senior and without
-    assert min(v.breach_rate for v in with_senior) > 3 * max(v.breach_rate for v in without)
+    assert min(v.breach_rate for v in with_senior) > max(v.breach_rate for v in without)
 
 
 # --- Activities and bottlenecks --------------------------------------------------------
 
 
-def test_senior_approval_is_the_only_bottleneck(acts) -> None:
-    assert [a.activity for a in acts.internal if a.is_bottleneck] == ["Senior Approval"]
+def test_senior_approval_and_survey_are_the_bottlenecks(acts) -> None:
+    flagged = {a.activity for a in acts.internal if a.is_bottleneck}
+    assert flagged == {"Senior Approval", "Survey & Loss Assessment"}  # RC1, RC5
     assert acts.internal[0].activity == "Senior Approval"  # sorted by mean wait
 
 
@@ -166,4 +171,4 @@ def test_domain_endpoint_describes_filters_and_data_range(client, dataset) -> No
     names = [f["name"] for f in body["filters"]]
     assert "channel" in names and "month" not in names
     assert body["cases"] == len(dataset.cases)
-    assert body["data_from"] >= "2026-04-01" and body["data_to"] <= "2026-09-30"
+    assert body["data_from"] >= "2025-04-01" and body["data_to"] <= "2026-09-30"
