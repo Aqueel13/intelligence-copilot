@@ -1,4 +1,4 @@
-.PHONY: secrets users watch eval eval-report up down logs ps test lint fmt check migrate data knowledge seed psql reset-db
+.PHONY: secrets users showcase-export showcase-import watch eval eval-report up down logs ps test lint fmt check migrate data knowledge seed psql reset-db
 
 secrets:       ## Add any missing generated secrets to .env (never overwrites existing ones)
 	@for k in OPERATIONS_MCP_BACKEND_TOKEN OPERATIONS_MCP_EXTERNAL_TOKEN ANALYTICS_MCP_EXTERNAL_TOKEN KNOWLEDGE_MCP_EXTERNAL_TOKEN ENTERPRISE_API_KEY ADMIN_PASSWORD DEMO_PASSWORD; do \
@@ -30,6 +30,12 @@ users:         ## Create the admin and the demo accounts (passwords from .env: m
 	cd backend && uv run python -m watchdog_backend.identity seed
 
 seed: data knowledge users   ## Everything a fresh database needs
+
+showcase-export: ## Write every showcase run to showcase/showcase_runs.json (commit it)
+	cd backend && uv run python -m watchdog_backend.investigation showcase-export
+
+showcase-import: ## Load showcase/showcase_runs.json (needs the same data: make seed first)
+	cd backend && uv run python -m watchdog_backend.investigation showcase-import
 
 eval-retrieval: ## Retrieval benchmark (no LLM): hit@k and MRR per method
 	cd backend && uv run python -m watchdog_backend.knowledge evaluate

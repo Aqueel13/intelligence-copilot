@@ -113,11 +113,18 @@ cp .env.example .env          # then set POSTGRES_PASSWORD (and the same value i
 make secrets                  # generate MCP tokens, the mock system's key, account passwords
 make up                       # build and start postgres, migrations, backend, frontend
 make seed                     # both packs' data and policies, plus the admin and demo accounts
+make showcase-import          # optional: the recorded showcase investigations (showcase/)
 ```
+
+Showcase runs are recorded investigations anyone can replay without a model call. Record
+and mark them in the app (admin), then `make showcase-export` writes them to
+`showcase/showcase_runs.json`, which is committed; `make showcase-import` loads them into
+another database with the same data (it refuses different data, so replays never cite numbers
+that are not there).
 
 | What | URL |
 |------|-----|
-| App: sign in as `admin@watchdog.local` with `ADMIN_PASSWORD` from `.env` | http://localhost:5173 |
+| App: browse as a visitor, or sign in as `admin@watchdog.local` with `ADMIN_PASSWORD` from `.env` | http://localhost:5173 |
 | API docs | http://localhost:8000/api/docs |
 | Health | http://localhost:8000/api/health |
 

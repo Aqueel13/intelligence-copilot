@@ -220,3 +220,62 @@ def test_policy_questions_are_rate_limited_after_a_cache_miss(
     assert client.post("/api/knowledge/ask", json=q).json()["cached"]
     r = client.post("/api/knowledge/ask", json=other)
     assert r.status_code == 429
+
+
+# --- export / import: shipping showcase runs to another database ----------------------------
+
+
+def test_showcase_runs_round_trip_and_replay(scripted, client_as, db_engine, tmp_path) -> None:
+    from watchdog_backend.investigation import showcase
+
+    run_id = _events(
+        _investigate(client_as("p.nair"), "Why do agent claims breach the SLA?", fresh=True).text
+    )[0][1]["id"]
+    admin = client_as("admin")
+    marked = admin.put(f"/api/investigations/{run_id}/showcase", json={"showcase": True})
+    assert marked.status_code == 200
+    path = tmp_path / "runs.json"
+    with db_engine.connect() as conn:
+        counts = showcase.write_export(conn, path)
+    assert counts["insurance_claims"] >= 1
+
+    with db_engine.begin() as conn:  # the target database does not have the run yet
+        conn.execute(
+            text("DELETE FROM intelligence.investigations WHERE investigation_id = :id"),
+            {"id": run_id},
+        )
+    with db_engine.begin() as conn:
+        showcase.read_import(conn, path)
+    with db_engine.begin() as conn:  # importing twice updates in place, never duplicates
+        showcase.read_import(conn, path)
+    with db_engine.connect() as conn:
+        row = conn.execute(
+            text("""SELECT count(*), bool_and(showcase), max(cache_key), max(user_id)
+                    FROM intelligence.investigations WHERE investigation_id = :id"""),
+            {"id": run_id},
+        ).one()
+    assert tuple(row) == (1, True, None, "showcase-import")
+    replay = _events(client_as("guest").get(f"/api/investigations/{run_id}/replay?speed=100").text)
+    assert replay[0][1]["id"] == run_id and replay[-1][0] == "done"
+    admin.put(f"/api/investigations/{run_id}/showcase", json={"showcase": False})
+
+
+def test_showcase_import_refuses_other_data_unless_forced(db_engine, tmp_path) -> None:
+    import json
+
+    import pytest as _pytest
+
+    from watchdog_backend.investigation import showcase
+
+    doc = {
+        "format": showcase.FORMAT,
+        "packs": {"insurance_claims": {"data_version": "some-other-dataset", "runs": []}},
+    }
+    with db_engine.begin() as conn, _pytest.raises(showcase.ShowcaseError, match="different"):
+        showcase.import_runs(conn, doc)
+    with db_engine.begin() as conn:
+        assert showcase.import_runs(conn, doc, force=True) == {"insurance_claims": 0}
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps({**doc, "format": 99}))
+    with db_engine.begin() as conn, _pytest.raises(showcase.ShowcaseError, match="format"):
+        showcase.read_import(conn, bad)
