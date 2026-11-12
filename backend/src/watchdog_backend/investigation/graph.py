@@ -622,7 +622,8 @@ def build_graph(deps: Deps):
                 model,
                 prompts.synthesis,
                 f"{prompt}\n\nYour previous summary used numbers that are not in the facts: "
-                f"{', '.join(check.unverified)}. Rewrite it using only numbers from the facts, "
+                f"{', '.join(check.unverified)}. Rewrite it using only numbers from the facts "
+                f"(never a total or sum you worked out: quote figures separately), "
                 f"with the same units (lakh, %, breaches in the period vs a year).",
             ).strip()
             retry_check = verify_numbers(retry, facts)

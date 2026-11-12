@@ -171,8 +171,9 @@ operations leadership, in 4 to 6 sentences of plain business English. State the 
 confirmed root causes in order of impact, anything that looked like a cause but was ruled \
 out and why, and the recommended actions with their estimated effect. Use ONLY numbers that \
 appear in the facts provided, written the same way and with the same units: keep "in the \
-months analysed" and "a year" figures distinct, and write money as given (₹ lakh). Do not \
-use bullet points or headings."""
+months analysed" and "a year" figures distinct, and write money as given (₹ lakh). Never \
+add, subtract or average figures yourself (no totals or combined savings): quote each \
+action's own figure, or leave the number out. Do not use bullet points or headings."""
 
 
 def plain(model: BaseChatModel, system: str, user: str) -> str:
