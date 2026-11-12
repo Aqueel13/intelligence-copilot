@@ -103,10 +103,9 @@ ui:
     breakdown_metrics: { sla_breach_rate: SLA breach rate, avg_cycle_days: Cycle time, rework_rate: Rework, doc_request_rate: Documents requested }
   investigate_examples:
     - Why are claims breaching the five-day SLA? Find the root causes and recommend corrective actions.
-    - Why do health claims take longer than motor claims?
+    - Why do motor claims slow down in the monsoon months?
     - What is the SLA breach rate by channel?
     - Can senior approvals be delegated to team leads?
-    - Why do motor claims slow down in the monsoon months?
   knowledge_examples:
     - What should happen when the surveyor network falls behind in the monsoon?
     - Who approves a claim of ₹3,00,000, and how fast?

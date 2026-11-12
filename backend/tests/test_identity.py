@@ -168,3 +168,44 @@ def test_non_admins_cannot_act_as(client_as) -> None:
     assert (
         client_as("m.khan").post("/api/auth/act-as", json={"user_id": "a.rao"}).status_code == 403
     )
+
+
+NEW_USER = {
+    "user_id": "x.intruder",
+    "email": "x.intruder@example.com",
+    "name": "X Intruder",
+    "platform_role": "admin",
+    "password": "long-enough-pw",
+    "pack_roles": {},
+}
+
+
+@pytest.mark.parametrize("user", ["guest", "m.khan"])
+def test_only_admins_can_add_or_change_users(client_as, user) -> None:
+    """No one but an admin can create an account or change one, their own included (an analyst
+    who could edit themselves could make themselves admin)."""
+    c = client_as(user)
+    assert c.post("/api/auth/users", json=NEW_USER).status_code == 403
+    assert c.patch(f"/api/auth/users/{user}", json={"platform_role": "admin"}).status_code == 403
+    assert c.patch("/api/auth/users/admin", json={"active": False}).status_code == 403
+    assert c.get("/api/auth/me").json()["user"]["platform_role"] != "admin"
+
+
+def test_admin_acting_as_an_analyst_cannot_add_users(client_as) -> None:
+    admin = client_as("admin")
+    assert admin.post("/api/auth/act-as", json={"user_id": "m.khan"}).status_code == 200
+    try:
+        assert admin.post("/api/auth/users", json=NEW_USER).status_code == 403
+    finally:
+        admin.post("/api/auth/act-as", json={"user_id": None})
+
+
+def test_there_is_no_self_registration(client_as) -> None:
+    from fastapi.testclient import TestClient
+
+    from watchdog_backend.main import app
+
+    anonymous = TestClient(app)
+    assert anonymous.post("/api/auth/users", json=NEW_USER).status_code == 401
+    routes = {getattr(r, "path", "") for r in app.routes}
+    assert not any(w in p for p in routes for w in ("register", "signup", "sign-up"))

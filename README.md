@@ -68,14 +68,15 @@ counterfactual per case). Full detail in the [evaluation report](docs/evaluation
 
 | | Insurance claims | Procure-to-pay |
 |---|---|---|
-| Investigations (models × seeds × questions) | 36 (4 × 3 × 3; 30 completed, 6 refused by free-tier limits) | 9 (local 7B × 3 × 3) |
-| Mean recall of planted causes | 100% for every model, every completed run | 100% |
+| Investigations, 18-month data (local 7B × 3 seeds × all questions) | 15 | 12 |
+| Mean recall of planted causes | 100% | 100% |
 | Decoys accepted as causes | **0** in every run | **0** in every run |
-| Policy Q&A: answers citing a relevant passage | 96% for every model | 100% |
-| What-if vs exact counterfactual | 0.51–0.99 of truth (understates) | 0.63–0.99 of truth (understates) |
+| Earlier six-month data | 3 cloud models + local, 36 runs (6 refused by free-tier limits): 100% recall in every completed run, 0 decoys | local 7B, 9 runs: 100% recall, 0 decoys |
+| Policy Q&A: answers citing a relevant passage | 95–100% by model | 100% |
+| What-if vs exact counterfactual (18-month data) | 0.55–0.97 of truth (understates) | 0.64–1.17 of truth |
 
-These results are on the earlier six-month datasets. The data now covers 18 months with a fifth
-planted cause and a new decoy per pack (`docs/PROJECT_BRIEF.md` §5, §5b); it has not been re-evaluated yet.
+The 18-month data has five planted causes and three or four decoys per pack (`docs/PROJECT_BRIEF.md`
+§5, §5b); the cloud models have not been re-run on it yet (free-tier quotas).
 
 Every miss was over-caution (a real cause left inconclusive), never a decoy accepted; the
 evaluation also found nine product defects, each fixed and re-measured

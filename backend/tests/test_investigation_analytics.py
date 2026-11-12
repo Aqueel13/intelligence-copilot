@@ -196,3 +196,42 @@ def test_scoped_what_if_uses_the_population_baseline(db_engine, pack) -> None:
     full = evaluate_action(population, action, cat.economics)
     assert alone.breaches_avoided == 0  # no baseline inside the scope: unknown, not guessed
     assert scoped.breaches_avoided == pytest.approx(full.breaches_avoided, rel=0.01)
+
+
+# --- many comparisons: chance patterns are not causes ---------------------------------------
+
+
+def test_family_threshold_scales_with_the_number_of_comparisons() -> None:
+    from watchdog_backend.investigation.stats import family_alpha
+
+    assert family_alpha(1) == 0.01 and family_alpha(50) == pytest.approx(0.0002)
+
+
+@pytest.mark.parametrize("seed", [7, 1234])
+def test_pune_by_chance_is_not_a_cause(pack, seed) -> None:
+    """In these seeds Pune breaches ~10 points more: partly its broker mix (RC2), the rest
+    chance (12 other seeds average -2 points once channel is held equal). Raw it can pass a
+    single 1% test; across the scan's comparisons, with channel controlled, it does not."""
+    from watchdog_backend.generator.registry import generate
+    from watchdog_backend.investigation.stats import family_alpha
+
+    t = generate(pack, seed=seed).joined_truth()
+    y = t["breached"].astype(float)
+    pune = t["region"] == "Pune"
+    alpha = family_alpha(57)  # 3 outcomes × 19 values of the 5 scanned dimensions
+    assert compare_proportions(pune, y, "p").significant  # a naive test is fooled
+    r = stratified_difference(t.assign(y=y), pune, "y", "channel", "p", alpha=alpha)
+    assert r.explained_by_control and "may be chance" in r.note
+
+
+def test_a_real_cause_survives_the_stricter_tests(frames) -> None:
+    from watchdog_backend.investigation.scan import segment_alpha
+
+    df = frames.cases.assign(y=frames.cases["doc_requested"].astype(float))
+    broker = df["channel"] == "broker"
+    alpha = segment_alpha(frames)
+    assert compare_proportions(broker, df["y"], "b", alpha=alpha).significant
+    for control in ("amount_band", "line_of_business", "team"):
+        assert not stratified_difference(
+            df, broker, "y", control, "b", alpha=alpha
+        ).explained_by_control

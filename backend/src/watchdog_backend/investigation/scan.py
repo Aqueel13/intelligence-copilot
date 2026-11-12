@@ -6,7 +6,8 @@ discover patterns on its own.
 
 Signal kinds
 - segment:    a dimension value whose rate (breach, or a loop declared in the pack) differs
-              significantly from the rest (two-proportion z-test, p < 0.01, |diff| ≥ 5 points),
+              significantly from the rest (two-proportion z-test at 1% across the whole family
+              of comparisons the scan makes (Bonferroni), |diff| ≥ 5 points),
               plus small segments with large differences flagged as low-sample
 - bottleneck: an activity flagged by the process analysis, or a large queue whose waiting
               time changed over the months in step with the breach rate
@@ -23,7 +24,7 @@ from scipy.stats import pearsonr
 
 from watchdog_backend.analytics.process import ActivityAnalysis
 from watchdog_backend.investigation.data import Frames
-from watchdog_backend.investigation.stats import compare_proportions
+from watchdog_backend.investigation.stats import compare_proportions, family_alpha
 
 MIN_DIFF = 0.05
 MIN_MONTHS = 4  # for a month-by-month comparison
@@ -56,15 +57,27 @@ class ScanResult(BaseModel):
     signals: list[Signal]
 
 
+def segment_comparisons(frames: Frames, dimensions: list[str]) -> int:
+    """How many segment comparisons a scan of these frames makes (every outcome × every
+    value of every scanned dimension): the family a significance threshold must cover."""
+    values = sum(frames.cases[d].nunique() for d in dimensions if d in frames.cases)
+    return len(frames.pack.outcome_labels) * values
+
+
+def segment_alpha(frames: Frames) -> float:
+    return family_alpha(segment_comparisons(frames, frames.pack.analysis.dimensions))
+
+
 def segment_signals(frames: Frames, dimensions: list[str]) -> list[Signal]:
     cases = frames.cases
     out: list[Signal] = []
+    alpha = family_alpha(segment_comparisons(frames, dimensions))
     for outcome, label in frames.pack.outcome_labels.items():
         y = cases[outcome].astype(float)
         for dim in dimensions:
             for value in sorted(cases[dim].dropna().unique(), key=str):
                 mask = cases[dim] == value
-                cmp = compare_proportions(mask, y, f"{dim}={value}")
+                cmp = compare_proportions(mask, y, f"{dim}={value}", alpha=alpha)
                 big = abs(cmp.difference) >= MIN_DIFF
                 if not big or not (cmp.significant or cmp.low_sample):
                     continue

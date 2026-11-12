@@ -22,6 +22,9 @@ def _key(r: dict) -> tuple:
     return (d, "retrieval", r["method"])
 
 
+LEGACY_DATASET = "6 months (earlier datasets)"
+
+
 def _load(dirs: list[Path]) -> tuple[list[dict], list[dict], list[dict]]:
     """Merge runs in the order given: a later run replaces an earlier result for the same
     (domain, suite, model, seed, question). Replaced results are returned so the report lists
@@ -38,6 +41,8 @@ def _load(dirs: list[Path]) -> tuple[list[dict], list[dict], list[dict]]:
                 r = json.loads(line)
                 r.setdefault("domain", meta["domain"])
                 r["_run"] = d.name
+                # Runs before 2026-11-12 did not record their dataset: all used six months.
+                r["_dataset"] = meta.get("dataset") or LEGACY_DATASET
                 if _key(r) in merged:
                     superseded.append(merged[_key(r)])
                 merged[_key(r)] = r
@@ -178,12 +183,12 @@ def _domain_section(w, domain: str, records: list[dict]) -> None:
             "from runs the model itself failed.\n"
         )
         w(
-            "| Model | Runs | Completed | Rate-limited | Other failures | Mean recall "
+            "| Model | Data | Runs | Completed | Rate-limited | Other failures | Mean recall "
             "| All expected causes found | Decoys accepted "
             "| Overrides fired | Unverified numbers / run | Mean duration | LLM calls / run "
             "| Tokens / run |"
         )
-        w("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+        w("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
         for m in models:
             rs = [r for r in inv if r["model"] == m]
             if not rs:
@@ -192,7 +197,8 @@ def _domain_section(w, domain: str, records: list[dict]) -> None:
             decoy_runs = [r for r in ok if r["decoys"]]
             limited = sum(_failure_kind(r).startswith("rate") for r in rs if not r["ok"])
             w(
-                f"| `{m}` | {len(rs)} | {len(ok)} | {limited} | {len(rs) - len(ok) - limited} "
+                f"| `{m}` | {' + '.join(sorted({r['_dataset'] for r in rs}))} "
+                f"| {len(rs)} | {len(ok)} | {limited} | {len(rs) - len(ok) - limited} "
                 f"| {_pct(_mean([r['recall'] for r in ok]))} "
                 f"| {sum(r['recall'] == 1 for r in ok)}/{len(ok)} "
                 f"| {sum(bool(r['decoys_accepted']) for r in decoy_runs)}/{len(decoy_runs)} runs "

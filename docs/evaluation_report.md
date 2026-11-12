@@ -1,6 +1,6 @@
 # Evaluation report
 
-Generated from 8 run(s) over 2 domain pack(s): `2026-11-10T14:43:04` (insurance_claims), `2026-11-10T14:23:19` (insurance_claims), `2026-11-10T15:54:20` (insurance_claims), `2026-11-10T19:27:50` (insurance_claims), `2026-11-10T20:28:49` (procure_to_pay), `2026-11-12T10:49:06` (insurance_claims), `2026-11-12T11:08:03` (insurance_claims), `2026-11-12T11:32:20` (insurance_claims). Models: `groq:openai/gpt-oss-120b`, `groq:openai/gpt-oss-20b`, `groq:qwen/qwen3.8-27b`, `ollama:qwen2.5:7b`.
+Generated from 12 run(s) over 2 domain pack(s): `2026-11-10T14:43:04` (insurance_claims), `2026-11-10T14:23:19` (insurance_claims), `2026-11-10T15:54:20` (insurance_claims), `2026-11-10T19:27:50` (insurance_claims), `2026-11-10T20:28:49` (procure_to_pay), `2026-11-12T10:49:06` (insurance_claims), `2026-11-12T11:08:03` (insurance_claims), `2026-11-12T11:32:20` (insurance_claims), `2026-11-12T13:01:35` (insurance_claims), `2026-11-12T13:40:47` (insurance_claims), `2026-11-12T13:18:51` (procure_to_pay), `2026-11-12T13:45:42` (procure_to_pay). Models: `groq:openai/gpt-oss-120b`, `groq:openai/gpt-oss-20b`, `groq:qwen/qwen3.8-27b`, `ollama:qwen2.5:7b`.
 
 All results are measured, not targets. Failed runs are reported, not dropped. Every investigation is scored against the generator's planted ground truth, declared per pack in `domain_packs/<pack>/evaluation/investigations.yaml`: a planted cause counts as found only if a hypothesis that targets it is *supported*; a decoy counts as accepted if a supported hypothesis rests only on it. Both packs run on the same engine code: only configuration and the synthetic-data generator differ.
 
@@ -14,12 +14,12 @@ Pack `insurance_claims`. Models: `groq:openai/gpt-oss-120b`, `groq:openai/gpt-os
 
 Quality columns cover completed runs only. *Rate-limited* runs never reached the model's reasoning (the provider refused the request), so they are counted apart from runs the model itself failed.
 
-| Model | Runs | Completed | Rate-limited | Other failures | Mean recall | All expected causes found | Decoys accepted | Overrides fired | Unverified numbers / run | Mean duration | LLM calls / run | Tokens / run |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `groq:openai/gpt-oss-120b` | 9 | 9 | 0 | 0 | 100% | 9/9 | 0/6 runs | 31 | 0.00 | 105 s | 9.8 | 18,126 |
-| `groq:openai/gpt-oss-20b` | 9 | 8 | 1 | 0 | 100% | 8/8 | 0/6 runs | 26 | 0.00 | 140 s | 10.5 | 23,104 |
-| `groq:qwen/qwen3.8-27b` | 9 | 4 | 5 | 0 | 100% | 4/4 | 0/3 runs | 1 | 0.00 | 201 s | 12.5 | 14,369 |
-| `ollama:qwen2.5:7b` | 9 | 9 | 0 | 0 | 100% | 9/9 | 0/6 runs | 22 | 0.00 | 101 s | 12.1 | 11,575 |
+| Model | Data | Runs | Completed | Rate-limited | Other failures | Mean recall | All expected causes found | Decoys accepted | Overrides fired | Unverified numbers / run | Mean duration | LLM calls / run | Tokens / run |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `groq:openai/gpt-oss-120b` | 6 months (earlier datasets) | 9 | 9 | 0 | 0 | 100% | 9/9 | 0/6 runs | 31 | 0.00 | 105 s | 9.8 | 18,126 |
+| `groq:openai/gpt-oss-20b` | 6 months (earlier datasets) | 9 | 8 | 1 | 0 | 100% | 8/8 | 0/6 runs | 26 | 0.00 | 140 s | 10.5 | 23,104 |
+| `groq:qwen/qwen3.8-27b` | 6 months (earlier datasets) | 9 | 4 | 5 | 0 | 100% | 4/4 | 0/3 runs | 1 | 0.00 | 201 s | 12.5 | 14,369 |
+| `ollama:qwen2.5:7b` | 18 months, 18,000 cases | 15 | 15 | 0 | 0 | 100% | 15/15 | 0/9 runs | 29 | 0.00 | 78 s | 11.4 | 13,430 |
 
 #### By question
 
@@ -33,10 +33,12 @@ Quality columns cover completed runs only. *Rate-limited* runs never reached the
 | `health_vs_motor` | `groq:openai/gpt-oss-20b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
 | `health_vs_motor` | `groq:qwen/qwen3.8-27b` | 7: error, 42: 100%, 1234: error | 0/1 | 1/1 |
 | `health_vs_motor` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
+| `kolkata_region` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
+| `monsoon_motor` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
 | `sla_root_causes` | `groq:openai/gpt-oss-120b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 12/12 |
 | `sla_root_causes` | `groq:openai/gpt-oss-20b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 11/12 |
 | `sla_root_causes` | `groq:qwen/qwen3.8-27b` | 7: 100%, 42: 100%, 1234: error | 0/2 | 8/8 |
-| `sla_root_causes` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 10/12 |
+| `sla_root_causes` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 11/15 |
 
 #### Planted causes found (all questions that expect them)
 
@@ -45,7 +47,7 @@ Quality columns cover completed runs only. *Rate-limited* runs never reached the
 | `groq:openai/gpt-oss-120b` | 6/6 | 6/6 | 3/3 | 3/3 | – |
 | `groq:openai/gpt-oss-20b` | 6/6 | 5/5 | 3/3 | 3/3 | – |
 | `groq:qwen/qwen3.8-27b` | 3/3 | 3/3 | 2/2 | 2/2 | – |
-| `ollama:qwen2.5:7b` | 6/6 | 6/6 | 3/3 | 3/3 | – |
+| `ollama:qwen2.5:7b` | 6/6 | 6/6 | 6/6 | 3/3 | 6/6 |
 
 #### Safeguards at work
 
@@ -56,7 +58,7 @@ How often the deterministic safeguards changed the outcome:
 | `groq:openai/gpt-oss-120b` | 34 | 6 | 0 | 25 | 0/9 | 9/9 |
 | `groq:openai/gpt-oss-20b` | 34 | 6 | 0 | 20 | 1/8 | 8/8 |
 | `groq:qwen/qwen3.8-27b` | 2 | 1 | 0 | 0 | 1/4 | 4/4 |
-| `ollama:qwen2.5:7b` | 34 | 15 | 0 | 7 | 1/9 | 3/9 |
+| `ollama:qwen2.5:7b` | 41 | 14 | 0 | 15 | 7/15 | 7/15 |
 
 Downgrades stop decoys (a model calling a confounded effect a cause). Upgrades and confirmed findings stop over-caution: the evidence rule only ever adds or upgrades hypotheses worded by code from evidence that is significant, large enough, not a small sample and not explained by any confounder; a sentence the model wrote is never re-judged. Runs made before the upgrade rules existed could only downgrade. *Negative-value actions recommended* counts runs that recommended an action whose estimated net value is negative; the recommender may do so only when no positive action addresses a supported cause, and the UI marks it "Not cost-effective".
 
@@ -76,7 +78,7 @@ Downgrades stop decoys (a model calling a confounded effect a cause). Upgrades a
 | `groq:openai/gpt-oss-120b` | 28 | 96% | 96% | 96% | 73% | 5/5 | 0 | 2.9 s |
 | `groq:openai/gpt-oss-20b` | 28 | 96% | 96% | 85% | 69% | 5/5 | 0 | 2.7 s |
 | `groq:qwen/qwen3.8-27b` | 28 | 100% | 96% | 89% | 97% | 5/5 | 0 | 1.9 s |
-| `ollama:qwen2.5:7b` | 28 | 96% | 96% | 89% | 75% | 5/5 | 0 | 2.2 s |
+| `ollama:qwen2.5:7b` | 38 | 97% | 95% | 89% | 78% | 5/5 | 0 | 1.4 s |
 
 *Model's own citation accuracy* = share of answer sentences whose citation the model got right before the verifier corrected anything (decision D20).
 
@@ -84,20 +86,21 @@ Downgrades stop decoys (a model calling a confounded effect a cause). Upgrades a
 
 | Method | Hit@1 | Hit@3 | Hit@5 | MRR@10 |
 |---|---|---|---|---|
-| vector | 0.79 | 0.93 | 1.00 | 0.87 |
-| keyword | 0.61 | 0.86 | 0.89 | 0.72 |
-| hybrid | 0.75 | 1.00 | 1.00 | 0.86 |
-| hybrid_rerank | 0.75 | 1.00 | 1.00 | 0.87 |
+| vector | 0.71 | 0.87 | 1.00 | 0.82 |
+| keyword | 0.50 | 0.76 | 0.87 | 0.64 |
+| hybrid | 0.66 | 0.95 | 0.97 | 0.80 |
+| hybrid_rerank | 0.71 | 0.92 | 0.97 | 0.83 |
 
 ### 4. What-if engine vs exact counterfactuals (no LLM)
 
 | Action | seed 7: estimate / truth | seed 42: estimate / truth | seed 1234: estimate / truth | Mean ratio |
 |---|---|---|---|---|
-| `delegate_mid_value_approvals` | 442 / 522 | 426 / 514 | 455 / 523 | 0.85 |
-| `add_senior_adjuster_capacity` | 563 / 645 | 516 / 625 | 557 / 648 | 0.85 |
-| `enforce_broker_checklist` | 112 / 137 | 106 / 124 | 127 / 124 | 0.90 |
-| `retrain_team_b` | 92 / 96 | 79 / 76 | 97 / 99 | 0.99 |
-| `saturday_rota` | 53 / 101 | 51 / 99 | 44 / 91 | 0.51 |
+| `delegate_mid_value_approvals` | 499 / 607 | 530 / 629 | 560 / 691 | 0.82 |
+| `add_senior_adjuster_capacity` | 650 / 765 | 676 / 779 | 695 / 848 | 0.85 |
+| `enforce_broker_checklist` | 481 / 529 | 494 / 543 | 476 / 526 | 0.91 |
+| `retrain_team_b` | 413 / 435 | 367 / 376 | 401 / 406 | 0.97 |
+| `saturday_rota` | 247 / 428 | 280 / 515 | 244 / 463 | 0.55 |
+| `activate_monsoon_survey_panel` | 669 / 912 | 701 / 975 | 633 / 887 | 0.72 |
 
 A ratio below 1 means the what-if understates the benefit (it removes waiting time but does not re-run the working calendar or the planted mechanism, e.g. a capped goods-receipt wait still leaves the extra GRN-pending invoices).
 
@@ -109,23 +112,24 @@ Pack `procure_to_pay`. Models: `ollama:qwen2.5:7b`. Seeds: [7, 42, 1234].
 
 Quality columns cover completed runs only. *Rate-limited* runs never reached the model's reasoning (the provider refused the request), so they are counted apart from runs the model itself failed.
 
-| Model | Runs | Completed | Rate-limited | Other failures | Mean recall | All expected causes found | Decoys accepted | Overrides fired | Unverified numbers / run | Mean duration | LLM calls / run | Tokens / run |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `ollama:qwen2.5:7b` | 9 | 9 | 0 | 0 | 100% | 9/9 | 0/9 runs | 33 | 0.33 | 90 s | 13.2 | 13,506 |
+| Model | Data | Runs | Completed | Rate-limited | Other failures | Mean recall | All expected causes found | Decoys accepted | Overrides fired | Unverified numbers / run | Mean duration | LLM calls / run | Tokens / run |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `ollama:qwen2.5:7b` | 18 months, 18,000 cases | 12 | 12 | 0 | 0 | 100% | 12/12 | 0/12 runs | 52 | 0.25 | 103 s | 15.4 | 20,783 |
 
 #### By question
 
 | Question | Model | Recall by seed | Decoys accepted | Remedy recommended for each cause found |
 |---|---|---|---|---|
 | `msme_late` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
-| `p2p_root_causes` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 11/12 |
+| `p2p_root_causes` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 14/15 |
+| `sanand_late` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
 | `services_slow` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
 
 #### Planted causes found (all questions that expect them)
 
 | Model | RC1 Chakan goods receipts | RC2 Free-text PO price exceptions | RC3 BPO capture errors | RC4 Weekly payment run | RC5 Paper invoices wait for capture |
 |---|---|---|---|---|---|
-| `ollama:qwen2.5:7b` | 3/3 | 6/6 | 6/6 | 3/3 | – |
+| `ollama:qwen2.5:7b` | 3/3 | 6/6 | 6/6 | 3/3 | 6/6 |
 
 #### Safeguards at work
 
@@ -133,7 +137,7 @@ How often the deterministic safeguards changed the outcome:
 
 | Model | Hypotheses added by coverage rule | Downgraded (model said supported; confounded or small sample) | Upgraded (code-worded hypothesis, strong evidence) | Findings confirmed by evidence rule | Runs whose summary needed a rewrite | Negative-value actions recommended |
 |---|---|---|---|---|---|---|
-| `ollama:qwen2.5:7b` | 44 | 25 | 0 | 8 | 2/9 | 1/9 |
+| `ollama:qwen2.5:7b` | 73 | 48 | 0 | 4 | 8/12 | 10/12 |
 
 Downgrades stop decoys (a model calling a confounded effect a cause). Upgrades and confirmed findings stop over-caution: the evidence rule only ever adds or upgrades hypotheses worded by code from evidence that is significant, large enough, not a small sample and not explained by any confounder; a sentence the model wrote is never re-judged. Runs made before the upgrade rules existed could only downgrade. *Negative-value actions recommended* counts runs that recommended an action whose estimated net value is negative; the recommender may do so only when no positive action addresses a supported cause, and the UI marks it "Not cost-effective".
 
@@ -146,7 +150,7 @@ None.
 
 | Model | Answerable questions | Answered (not refused) | Cited a relevant passage | Grounded after verification | Model's own citation accuracy | Unanswerable correctly declined | Errors | Mean generation |
 |---|---|---|---|---|---|---|---|---|
-| `ollama:qwen2.5:7b` | 25 | 100% | 100% | 100% | 86% | 5/5 | 0 | 1.7 s |
+| `ollama:qwen2.5:7b` | 34 | 100% | 100% | 100% | 79% | 5/5 | 0 | 1.4 s |
 
 *Model's own citation accuracy* = share of answer sentences whose citation the model got right before the verifier corrected anything (decision D20).
 
@@ -154,20 +158,22 @@ None.
 
 | Method | Hit@1 | Hit@3 | Hit@5 | MRR@10 |
 |---|---|---|---|---|
-| vector | 0.88 | 0.96 | 1.00 | 0.93 |
-| keyword | 0.40 | 0.84 | 0.96 | 0.64 |
-| hybrid | 0.68 | 1.00 | 1.00 | 0.83 |
-| hybrid_rerank | 0.76 | 0.92 | 1.00 | 0.86 |
+| vector | 0.79 | 0.94 | 0.97 | 0.86 |
+| keyword | 0.32 | 0.74 | 0.85 | 0.55 |
+| hybrid | 0.65 | 0.94 | 1.00 | 0.78 |
+| hybrid_rerank | 0.71 | 0.91 | 1.00 | 0.82 |
 
 ### 4. What-if engine vs exact counterfactuals (no LLM)
 
 | Action | seed 7: estimate / truth | seed 42: estimate / truth | seed 1234: estimate / truth | Mean ratio |
 |---|---|---|---|---|
-| `chakan_grn_discipline` | 163 / 184 | 185 / 219 | 173 / 207 | 0.86 |
-| `add_chakan_stores_clerk` | 163 / 184 | 185 / 219 | 173 / 207 | 0.86 |
-| `enforce_catalogue_buying` | 415 / 417 | 399 / 417 | 440 / 437 | 0.99 |
-| `retrain_bpo_capture` | 331 / 392 | 303 / 370 | 293 / 370 | 0.82 |
-| `restore_twice_weekly_runs` | 209 / 341 | 222 / 335 | 210 / 337 | 0.63 |
+| `chakan_grn_discipline` | 503 / 590 | 514 / 607 | 457 / 576 | 0.83 |
+| `add_chakan_stores_clerk` | 503 / 590 | 514 / 607 | 457 / 576 | 0.83 |
+| `enforce_catalogue_buying` | 1208 / 1127 | 1202 / 1195 | 1225 / 1179 | 1.04 |
+| `retrain_bpo_capture` | 945 / 1086 | 899 / 1053 | 902 / 1046 | 0.86 |
+| `restore_twice_weekly_runs` | 231 / 351 | 207 / 343 | 227 / 342 | 0.64 |
+| `enforce_e_invoicing` | 1436 / 1234 | 1462 / 1238 | 1406 / 1220 | 1.17 |
+| `scan_paper_invoices_at_plants` | 1436 / 1234 | 1462 / 1238 | 1406 / 1220 | 1.17 |
 
 A ratio below 1 means the what-if understates the benefit (it removes waiting time but does not re-run the working calendar or the planted mechanism, e.g. a capped goods-receipt wait still leaves the extra GRN-pending invoices).
 
@@ -258,7 +264,7 @@ confounder checks showed the effect persisting, and left the correct claim-value
 "inconclusive" in one health-vs-motor run. Rules A and B now surface such causes as
 separate, code-worded findings; the model's own sentences are still never re-judged.
 
-39 earlier result(s) were re-run after a fix and replaced:
+61 earlier result(s) were re-run after a fix and replaced:
 
 | Pack | Model | Seed | Question | Earlier result |
 |---|---|---|---|---|
@@ -293,7 +299,13 @@ separate, code-worded findings; the model's own sentences are still never re-jud
 | insurance_claims | `ollama:qwen2.5:7b` | 7 | `sla_root_causes` | recall 100%, remedy recommended 4/4 |
 | insurance_claims | `ollama:qwen2.5:7b` | 7 | `health_vs_motor` | recall 100%, remedy recommended 1/1 |
 | insurance_claims | `ollama:qwen2.5:7b` | 7 | `broker_channel` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `ollama:qwen2.5:7b` | 7 | `sla_root_causes` | recall 100%, remedy recommended 4/4 |
+| insurance_claims | `ollama:qwen2.5:7b` | 7 | `health_vs_motor` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `ollama:qwen2.5:7b` | 7 | `broker_channel` | recall 100%, remedy recommended 1/1 |
 | insurance_claims | `ollama:qwen2.5:7b` | 42 | `broker_channel` | recall 100%, remedy recommended 0/1 |
+| insurance_claims | `ollama:qwen2.5:7b` | 42 | `sla_root_causes` | recall 100%, remedy recommended 3/4 |
+| insurance_claims | `ollama:qwen2.5:7b` | 42 | `health_vs_motor` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `ollama:qwen2.5:7b` | 42 | `broker_channel` | recall 100%, remedy recommended 1/1 |
 | insurance_claims | `ollama:qwen2.5:7b` | 42 | `sla_root_causes` | recall 100%, remedy recommended 3/4 |
 | insurance_claims | `ollama:qwen2.5:7b` | 42 | `health_vs_motor` | recall 100%, remedy recommended 1/1 |
 | insurance_claims | `ollama:qwen2.5:7b` | 42 | `broker_channel` | recall 100%, remedy recommended 1/1 |
@@ -301,6 +313,22 @@ separate, code-worded findings; the model's own sentences are still never re-jud
 | insurance_claims | `ollama:qwen2.5:7b` | 1234 | `sla_root_causes` | recall 100%, remedy recommended 3/4 |
 | insurance_claims | `ollama:qwen2.5:7b` | 1234 | `health_vs_motor` | recall 100%, remedy recommended 1/1 |
 | insurance_claims | `ollama:qwen2.5:7b` | 1234 | `broker_channel` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `ollama:qwen2.5:7b` | 1234 | `sla_root_causes` | recall 100%, remedy recommended 3/4 |
+| insurance_claims | `ollama:qwen2.5:7b` | 1234 | `health_vs_motor` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `ollama:qwen2.5:7b` | 1234 | `broker_channel` | recall 100%, remedy recommended 1/1 |
+| insurance_claims | `ollama:qwen2.5:7b` | 1234 | `broker_channel` | failed: RemoteProtocolError: Server disconnected without sending a response. |
+| insurance_claims | `ollama:qwen2.5:7b` | 1234 | `monsoon_motor` | failed: ConnectError: [Errno 111] Connection refused |
+| insurance_claims | `ollama:qwen2.5:7b` | 1234 | `kolkata_region` | failed: ConnectError: [Errno 111] Connection refused |
+| procure_to_pay | `ollama:qwen2.5:7b` | 7 | `p2p_root_causes` | recall 100%, remedy recommended 4/4 |
+| procure_to_pay | `ollama:qwen2.5:7b` | 7 | `services_slow` | recall 100%, remedy recommended 1/1 |
+| procure_to_pay | `ollama:qwen2.5:7b` | 7 | `msme_late` | recall 100%, remedy recommended 1/1 |
+| procure_to_pay | `ollama:qwen2.5:7b` | 42 | `p2p_root_causes` | recall 100%, remedy recommended 4/4 |
+| procure_to_pay | `ollama:qwen2.5:7b` | 42 | `services_slow` | recall 100%, remedy recommended 1/1 |
+| procure_to_pay | `ollama:qwen2.5:7b` | 42 | `msme_late` | recall 100%, remedy recommended 1/1 |
+| procure_to_pay | `ollama:qwen2.5:7b` | 1234 | `p2p_root_causes` | recall 100%, remedy recommended 3/4 |
+| procure_to_pay | `ollama:qwen2.5:7b` | 1234 | `services_slow` | recall 100%, remedy recommended 1/1 |
+| procure_to_pay | `ollama:qwen2.5:7b` | 1234 | `msme_late` | recall 100%, remedy recommended 1/1 |
+| procure_to_pay | `ollama:qwen2.5:7b` | 1234 | `sanand_late` | failed: RemoteProtocolError: peer closed connection without sending complete message bod |
 
 ## Method and limitations
 

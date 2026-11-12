@@ -13,7 +13,12 @@ from sqlalchemy import Connection
 from watchdog_backend.analytics.process import ActivityAnalysis
 from watchdog_backend.domain.pack import get_pack
 from watchdog_backend.investigation.data import Frames
-from watchdog_backend.investigation.scan import WEEKDAY_NAMES, monthly_wait, trend_reason
+from watchdog_backend.investigation.scan import (
+    WEEKDAY_NAMES,
+    monthly_wait,
+    segment_alpha,
+    trend_reason,
+)
 from watchdog_backend.investigation.stats import (
     StratifiedComparison,
     compare_proportions,
@@ -140,9 +145,10 @@ def _segment(ctx: EvidenceContext, c: SegmentCheck, auto: bool) -> EvidenceItem:
         df = ctx.population.cases.assign(_y=ctx.population.cases[c.outcome].astype(float))
         mask = df[c.dimension] == c.value
         versus = f"all other {ctx.frames.pack.case.labels} (outside this scope)"
-    cmp = compare_proportions(mask, df["_y"], f"{c.dimension}={c.value}")
+    alpha = segment_alpha(ctx.frames)  # the scan's family of comparisons (Bonferroni)
+    cmp = compare_proportions(mask, df["_y"], f"{c.dimension}={c.value}", alpha=alpha)
     controls = [
-        stratified_difference(df, mask, "_y", ctl, f"{c.dimension}={c.value}")
+        stratified_difference(df, mask, "_y", ctl, f"{c.dimension}={c.value}", alpha=alpha)
         for ctl in ctx.frames.pack.analysis.controls
         if ctl != c.dimension
     ]
@@ -152,7 +158,8 @@ def _segment(ctx: EvidenceContext, c: SegmentCheck, auto: bool) -> EvidenceItem:
     parts = [
         f"{label[0].upper()}{label[1:]}: {cmp.rate_in:.1%} for {c.dimension}='{c.value}' "
         f"(n={cmp.n_in}) vs {cmp.rate_out:.1%} for {versus} (n={cmp.n_out}); difference "
-        f"{cmp.difference:+.1%}, {sig} (p={cmp.p_value:.3g}).{sample}"
+        f"{cmp.difference:+.1%}, {sig} (p={cmp.p_value:.3g}; threshold {alpha:.2g}, 1% "
+        f"across all the segment comparisons the scan makes).{sample}"
     ]
     parts += [ctl.note for ctl in controls]
     data: dict[str, object] = cmp.model_dump()

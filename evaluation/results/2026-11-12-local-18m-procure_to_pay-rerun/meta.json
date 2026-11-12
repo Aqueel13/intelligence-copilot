@@ -1,0 +1,16 @@
+{
+  "started": "2026-11-12T13:45:42",
+  "database": "watchdog_eval_procure_to_pay",
+  "domain": "procure_to_pay",
+  "models": [
+    "ollama:qwen2.5:7b"
+  ],
+  "seeds": [
+    1234
+  ],
+  "suites": [
+    "investigation"
+  ],
+  "finished": "2026-11-12T13:47:36",
+  "dataset": "18 months, 18,000 cases"
+}

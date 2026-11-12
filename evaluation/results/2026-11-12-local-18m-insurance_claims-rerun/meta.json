@@ -1,0 +1,16 @@
+{
+  "started": "2026-11-12T13:40:47",
+  "database": "watchdog_eval_insurance_claims",
+  "domain": "insurance_claims",
+  "models": [
+    "ollama:qwen2.5:7b"
+  ],
+  "seeds": [
+    1234
+  ],
+  "suites": [
+    "investigation"
+  ],
+  "finished": "2026-11-12T13:45:12",
+  "dataset": "18 months, 18,000 cases"
+}

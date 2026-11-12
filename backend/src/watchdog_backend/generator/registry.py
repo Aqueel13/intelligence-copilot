@@ -21,6 +21,14 @@ class GeneratorSpec:
     default_cases: int
     cases_per_month: int  # for the "simulate next month" demo device
     action_effects: dict[str, dict[str, Any]]  # executed action -> generator config overrides
+    period: tuple[date, date]  # the default generation window
+
+    @property
+    def dataset_label(self) -> str:
+        """What a default dataset is, for evaluation reports ("18 months, 18,000 cases")."""
+        start, end = self.period
+        months = (end.year - start.year) * 12 + end.month - start.month + 1
+        return f"{months} months, {self.default_cases:,} cases"
 
 
 def _insurance() -> GeneratorSpec:
@@ -37,7 +45,13 @@ def _insurance() -> GeneratorSpec:
         )
         return m.InsuranceClaimsGenerator(pack, cfg).generate()
 
-    return GeneratorSpec(build, m.GeneratorConfig.n_claims, 1000, m.ACTION_EFFECTS)
+    return GeneratorSpec(
+        build,
+        m.GeneratorConfig.n_claims,
+        1000,
+        m.ACTION_EFFECTS,
+        (m.GeneratorConfig.start, m.GeneratorConfig.end),
+    )
 
 
 def _procure_to_pay() -> GeneratorSpec:
@@ -55,7 +69,11 @@ def _procure_to_pay() -> GeneratorSpec:
         return m.ProcureToPayGenerator(pack, cfg).generate()
 
     return GeneratorSpec(
-        build, m.GeneratorConfig.n_invoices, m.INVOICES_PER_MONTH, m.ACTION_EFFECTS
+        build,
+        m.GeneratorConfig.n_invoices,
+        m.INVOICES_PER_MONTH,
+        m.ACTION_EFFECTS,
+        (m.GeneratorConfig.start, m.GeneratorConfig.end),
     )
 
 

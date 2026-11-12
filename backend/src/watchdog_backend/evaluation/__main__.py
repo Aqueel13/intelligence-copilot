@@ -35,6 +35,7 @@ def cmd_run(args: argparse.Namespace) -> None:
 def _run(args: argparse.Namespace, db: str, domain: str, load_seed) -> None:
     from watchdog_backend.config import get_settings
     from watchdog_backend.evaluation import suites
+    from watchdog_backend.generator.registry import generator_spec
 
     # Free tiers cap tokens per minute; the SDKs wait for Retry-After, so allow more attempts.
     get_settings().llm_max_retries = args.max_retries
@@ -52,6 +53,7 @@ def _run(args: argparse.Namespace, db: str, domain: str, load_seed) -> None:
         "models": models,
         "seeds": seeds,
         "suites": sorted(chosen),
+        "dataset": generator_spec(domain).dataset_label,
     }
     (out / "meta.json").write_text(json.dumps(meta, indent=2))
     sink = (out / "results.jsonl").open("a", encoding="utf-8")
