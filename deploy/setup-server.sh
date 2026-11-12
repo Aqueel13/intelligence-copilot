@@ -20,9 +20,11 @@ done
 sudo netfilter-persistent save
 
 echo "== directories the containers write to (owned by uid 1000, the app user)"
+# Only git-ignored directories: a tracked file in a directory you do not own cannot be updated
+# by git pull (your login user is not always uid 1000; on Oracle's Ubuntu image it is not).
 cd "$(dirname "$0")/.."
 mkdir -p datasets/generated .cache backups
-sudo chown -R 1000:1000 datasets .cache showcase
+sudo chown -R 1000:1000 datasets/generated .cache
 
 echo
 echo "Done. Log out and back in (so the docker group applies), then continue with"

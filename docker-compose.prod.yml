@@ -52,7 +52,7 @@ x-repo-mounts: &repo-mounts
   - ./datasets:/datasets            # generated data (make prod-seed writes it)
   - ./.cache:/.cache                # embedding/reranker model files (downloaded once)
   - ./evaluation:/evaluation:ro     # saved evaluation runs (Models page)
-  - ./showcase:/showcase            # showcase runs (import, and export after a refresh)
+  - ./showcase:/showcase:ro         # showcase runs to import (recorded locally: D59)
 
 x-backend: &backend
   build: ./backend

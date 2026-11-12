@@ -1,4 +1,4 @@
-.PHONY: prod-secrets prod-up prod-start prod-down prod-logs prod-ps prod-seed prod-showcase-import prod-showcase-export prod-backup prod-update secrets users showcase-export showcase-import watch eval eval-report up down logs ps test lint fmt check migrate data knowledge seed psql reset-db
+.PHONY: prod-secrets prod-up prod-start prod-down prod-logs prod-ps prod-seed prod-showcase-import prod-backup prod-update secrets users showcase-export showcase-import watch eval eval-report up down logs ps test lint fmt check migrate data knowledge seed psql reset-db
 
 secrets:       ## Add any missing generated secrets to .env (never overwrites existing ones)
 	@for k in OPERATIONS_MCP_BACKEND_TOKEN OPERATIONS_MCP_EXTERNAL_TOKEN ANALYTICS_MCP_EXTERNAL_TOKEN KNOWLEDGE_MCP_EXTERNAL_TOKEN ENTERPRISE_API_KEY ADMIN_PASSWORD DEMO_PASSWORD; do \
@@ -99,9 +99,6 @@ prod-seed:     ## Production: data, policy documents and accounts (run once, aft
 
 prod-showcase-import: ## Production: load showcase/showcase_runs.json (after prod-seed)
 	$(PROD_RUN) python -m watchdog_backend.investigation showcase-import
-
-prod-showcase-export: ## Production: write the server's showcase runs to showcase/showcase_runs.json
-	$(PROD_RUN) python -m watchdog_backend.investigation showcase-export
 
 prod-backup:   ## Production: dump the database to backups/ (keeps the newest 14)
 	deploy/backup.sh

@@ -142,6 +142,8 @@ make prod-update                 # git pull, rebuild, restart; migrations run be
   clients) are not started in production.
 - **Certificates** live in the `caddy_data` volume. Keep it: deleting it makes Caddy request
   new certificates, and Let's Encrypt limits how many it issues per week.
-- **Refreshing the showcase runs** (after an engine change): run the investigations on the
-  server, mark them as showcase in the UI, then `make prod-showcase-export` and commit
-  `showcase/showcase_runs.json` from a machine with write access to the repository.
+- **Refreshing the showcase runs** (after an engine change): record them on a development
+  machine with the local model, where tokens are free (D59): run the investigations, mark them
+  as showcase in the UI, `make showcase-export`, commit `showcase/showcase_runs.json`; then on
+  the server `git pull && make prod-showcase-import`. Not on the server: the free Groq quota
+  is about ten investigations a day per model.
