@@ -1,22 +1,26 @@
 """Sign-in, the current user, acting as another user (admins, demos), and user management."""
 
+import logging
+import secrets
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from pydantic import BaseModel, Field
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, Field, model_validator
 
 from watchdog_backend.config import get_settings
 from watchdog_backend.db import get_engine
 from watchdog_backend.domain.pack import available_domains, current_domain, get_pack
 from watchdog_backend.governance import audit
 from watchdog_backend.governance.config import get_governance
-from watchdog_backend.identity import limits, rbac
+from watchdog_backend.identity import github, limits, rbac
 from watchdog_backend.identity import service as ids
 from watchdog_backend.identity.deps import principal, require
 from watchdog_backend.identity.middleware import COOKIE
 from watchdog_backend.identity.service import Principal, UserOut
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+log = logging.getLogger(__name__)
 _HTTP = {"unauthorized": 401, "forbidden": 403, "not_found": 404, "conflict": 409, "invalid": 422}
 
 
@@ -52,17 +56,96 @@ def login(body: LoginIn, response: Response) -> Me:
             token, user = ids.login(conn, body.email, body.password)
         except ids.IdentityError as exc:
             raise _fail(exc) from exc
+    _set_session_cookie(response, token)
+    return _me(Principal(user=user, real=user))
+
+
+def _set_session_cookie(response: Response, token: str) -> None:
     s = get_settings()
     response.set_cookie(
         COOKIE,
         token,
         max_age=s.session_hours * 3600,
         httponly=True,  # not readable by scripts
-        samesite="lax",  # not sent on cross-site POSTs
+        samesite="lax",  # not sent on cross-site POSTs; sent on the redirect back from GitHub
         secure=s.cookie_secure,
         path="/",
     )
-    return _me(Principal(user=user, real=user))
+
+
+# ---------------------------------------------------------------------- GitHub sign-in
+
+STATE_COOKIE = "wd_oauth_state"
+STATE_PATH = "/api/auth/github"
+# Why a GitHub sign-in failed, as the ?signin_error= the browser is sent back with.
+GITHUB_ERRORS = {"not_found": "no_account", "conflict": "conflict", "forbidden": "inactive"}
+
+
+@router.get("/providers")
+def providers() -> dict[str, bool]:
+    """Which sign-in methods the login form offers."""
+    return {"password": True, "github": github.configured()}
+
+
+def _callback_url(request: Request) -> str:
+    base = get_settings().public_url or str(request.base_url)
+    return base.rstrip("/") + github.CALLBACK_PATH
+
+
+@router.get("/github/login")
+def github_login(request: Request) -> RedirectResponse:
+    """Start GitHub sign-in: a random state in a short-lived cookie, then off to GitHub."""
+    if not github.configured():
+        raise HTTPException(status_code=404, detail="GitHub sign-in is not configured")
+    state = secrets.token_urlsafe(24)
+    response = RedirectResponse(github.authorize_url(state, _callback_url(request)), 302)
+    response.set_cookie(
+        STATE_COOKIE,
+        state,
+        max_age=600,
+        httponly=True,
+        samesite="lax",
+        secure=get_settings().cookie_secure,
+        path=STATE_PATH,
+    )
+    return response
+
+
+@router.get("/github/callback")
+def github_callback(
+    request: Request, code: str | None = None, state: str | None = None, error: str | None = None
+) -> RedirectResponse:
+    """GitHub sends the browser back here. The state must match the cookie set when sign-in
+    started (so nobody can sign a victim into their own account); then the code is exchanged
+    for the GitHub identity, which must match an account an admin created (D56)."""
+    if not github.configured():
+        raise HTTPException(status_code=404, detail="GitHub sign-in is not configured")
+
+    def back(problem: str | None = None) -> RedirectResponse:
+        response = RedirectResponse("/" + (f"?signin_error={problem}" if problem else ""), 302)
+        response.delete_cookie(STATE_COOKIE, path=STATE_PATH)
+        return response
+
+    if error:
+        return back("denied")
+    expected = request.cookies.get(STATE_COOKIE)
+    if not (code and state and expected and secrets.compare_digest(state, expected)):
+        return back("state")
+    try:
+        who = github.identity(code, _callback_url(request))
+    except github.GitHubError as exc:
+        log.warning("GitHub sign-in failed: %s", exc)
+        return back("github")
+    with get_engine().connect() as conn:
+        try:
+            user = ids.github_account(conn, who.id, who.login, who.verified_emails)
+        except ids.IdentityError as exc:
+            log.info("GitHub user %s refused: %s", who.login, exc)
+            return back(GITHUB_ERRORS.get(exc.code, "no_account"))
+        token, _ = ids.start_session(conn, user.user_id)
+    response = back()
+    _set_session_cookie(response, token)
+    return response
 
 
 @router.post("/logout", status_code=204)
@@ -149,8 +232,15 @@ class UserIn(BaseModel):
     email: str = Field(pattern=r"^[^@\s]+@[^@\s]+$", max_length=200)
     name: str = Field(min_length=1, max_length=100)
     platform_role: rbac.PlatformRole
-    password: str = Field(min_length=10, max_length=200)
+    password: str | None = Field(None, min_length=10, max_length=200)
+    github_login: str | None = Field(None, max_length=40)
     pack_roles: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def can_sign_in(self) -> "UserIn":
+        if not self.password and not (self.github_login or "").strip():
+            raise ValueError("Give an initial password, a GitHub user name, or both")
+        return self
 
 
 def _check_packs(pack_roles: dict[str, str] | None) -> None:
@@ -172,6 +262,7 @@ def create_user(body: UserIn, p: Annotated[Principal, Depends(require("manage_us
                 body.platform_role,
                 body.password,
                 body.pack_roles,
+                body.github_login,
             )
         except ids.IdentityError as exc:
             raise _fail(exc) from exc
@@ -185,6 +276,7 @@ def create_user(body: UserIn, p: Annotated[Principal, Depends(require("manage_us
                 "user": body.user_id,
                 "platform_role": body.platform_role,
                 "pack_roles": body.pack_roles,
+                "github_login": body.github_login,
                 "via": "ui",
             },
         )
@@ -197,6 +289,7 @@ class UserPatch(BaseModel):
     platform_role: rbac.PlatformRole | None = None
     active: bool | None = None
     password: str | None = Field(None, min_length=10, max_length=200)
+    github_login: str | None = Field(None, max_length=40)  # "" removes the link
     pack_roles: dict[str, str] | None = None
 
 

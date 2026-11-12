@@ -9,6 +9,7 @@ export interface UserInfo {
   active: boolean
   pack_roles: Record<string, string>
   last_login_at: string | null
+  github_login: string | null // GitHub user allowed to sign in as this account
 }
 
 export interface Me {
@@ -58,6 +59,7 @@ const send = (url: string, method: string, body?: unknown) =>
 
 export const authApi = {
   me: () => apiFetch('/api/auth/me').then((r) => json<Me>(r)),
+  providers: () => apiFetch('/api/auth/providers').then((r) => json<{ password: boolean; github: boolean }>(r)),
   login: (email: string, password: string) => send('/api/auth/login', 'POST', { email, password }).then((r) => json<Me>(r)),
   logout: () => send('/api/auth/logout', 'POST').then((r) => json<void>(r)),
   actAs: (user_id: string | null) => send('/api/auth/act-as', 'POST', { user_id }).then((r) => json<Me>(r)),
@@ -65,8 +67,8 @@ export const authApi = {
   roles: () => apiFetch('/api/auth/roles').then((r) => json<RoleInfo>(r)),
   usage: () => apiFetch('/api/auth/usage').then((r) => json<Usage>(r)),
   packs: () => apiFetch('/api/auth/packs').then((r) => json<{ domain: string; display_name: string }[]>(r)),
-  createUser: (b: { user_id: string; email: string; name: string; platform_role: string; password: string; pack_roles: Record<string, string> }) =>
+  createUser: (b: { user_id: string; email: string; name: string; platform_role: string; password?: string; github_login?: string; pack_roles: Record<string, string> }) =>
     send('/api/auth/users', 'POST', b).then((r) => json<UserInfo>(r)),
-  updateUser: (id: string, b: Partial<{ name: string; platform_role: string; active: boolean; password: string; pack_roles: Record<string, string> }>) =>
+  updateUser: (id: string, b: Partial<{ name: string; platform_role: string; active: boolean; password: string; github_login: string; pack_roles: Record<string, string> }>) =>
     send(`/api/auth/users/${id}`, 'PATCH', b).then((r) => json<UserInfo>(r)),
 }

@@ -5,7 +5,7 @@ import { api } from '../api/client'
 import { watchApi } from '../api/investigation'
 import { formatCount, formatDimensionValue, formatMonth } from '../lib/format'
 import { authApi } from '../api/auth'
-import { Login, useAuth } from '../lib/auth'
+import { Login, signInErrorAtLoad, useAuth } from '../lib/auth'
 import { useActiveDomain } from '../lib/domain'
 import { listDomains } from '../lib/domainStore'
 import { useDomainScope } from '../lib/hooks'
@@ -121,7 +121,9 @@ function DomainSwitcher() {
 /** Who is signed in, their roles here, sign out; admins can act as another user (audited). */
 function UserMenu() {
   const { me } = useAuth()
-  const [signIn, setSignIn] = useState(false)
+  // Back from a refused GitHub sign-in: reopen the form with the reason.
+  const [signInError, setSignInError] = useState(signInErrorAtLoad)
+  const [signIn, setSignIn] = useState(signInErrorAtLoad !== null)
   const realAdmin = (me?.real_user ?? me?.user)?.platform_role === 'admin'
   const users = useQuery({ queryKey: ['auth-users'], queryFn: authApi.users, enabled: realAdmin, staleTime: 60_000 })
   if (!me) return null
@@ -134,7 +136,15 @@ function UserMenu() {
         <button onClick={() => setSignIn(true)} className="rounded-md bg-series-1 px-2.5 py-1 font-semibold text-white">
           Sign in to run things
         </button>
-        {signIn && <Login onCancel={() => setSignIn(false)} />}
+        {signIn && (
+          <Login
+            onCancel={() => {
+              setSignIn(false)
+              setSignInError(null)
+            }}
+            initialError={signInError}
+          />
+        )}
       </div>
     )
   const switchTo = async (id: string) => {

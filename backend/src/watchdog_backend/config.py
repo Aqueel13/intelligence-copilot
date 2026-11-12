@@ -78,7 +78,16 @@ class Settings(BaseSettings):
     # Used only by `python -m watchdog_backend.identity seed` (make users).
     admin_email: str = "admin@watchdog.local"
     admin_password: str | None = None
+    admin_github_login: str | None = None  # link the seeded admin to this GitHub user
     demo_password: str | None = None
+
+    # GitHub sign-in (an OAuth app). Unset = password sign-in only. It signs in accounts an
+    # admin created, never creates one (D56). `public_url` is the address browsers use
+    # (https://<domain>, or http://localhost:5173 in development); the callback is
+    # <public_url>/api/auth/github/callback, which must match the OAuth app's setting.
+    github_client_id: str | None = None
+    github_client_secret: str | None = None
+    public_url: str | None = None
 
     # Rate limits on requests that spend model tokens (0 = no limit). Cache hits and showcase
     # replays are free; admins are exempt. "per_day" is for everyone together: free tiers cap

@@ -3,7 +3,8 @@
 uv run python -m watchdog_backend.identity seed
 
 Passwords come from ADMIN_PASSWORD and DEMO_PASSWORD (`make secrets` generates them). If one
-is missing, a random one is generated and printed once. Existing users are never overwritten;
+is missing, a random one is generated and printed once. ADMIN_GITHUB_LOGIN, if set, lets that
+GitHub user sign in as the admin. Existing users are never overwritten;
 missing per-pack business roles are added.
 """
 
@@ -27,9 +28,21 @@ def seed() -> None:
     demo_pw = s.demo_password or secrets.token_urlsafe(12)
     created = []
     with get_engine().connect() as conn:
-        if ids.get_user(conn, "admin") is None:
-            ids.create_user(conn, "admin", s.admin_email, "Administrator", "admin", admin_pw)
+        admin = ids.get_user(conn, "admin")
+        if admin is None:
+            ids.create_user(
+                conn,
+                "admin",
+                s.admin_email,
+                "Administrator",
+                "admin",
+                admin_pw,
+                github_login=s.admin_github_login,
+            )
             created.append(("admin", s.admin_email, "admin", not s.admin_password, admin_pw))
+        elif s.admin_github_login and not admin.github_login:
+            ids.update_user(conn, "admin", github_login=s.admin_github_login)
+            print(f"  linked admin to GitHub user {s.admin_github_login}")
 
         people: dict[str, tuple[str, dict[str, str]]] = {}
         for domain in available_domains():

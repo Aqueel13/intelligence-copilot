@@ -50,9 +50,22 @@ bash deploy/setup-server.sh      # Docker, firewall, directories; then log out a
 ```bash
 cd intelligence-copilot
 cp deploy/env.production.example .env
-nano .env                        # DOMAIN, ACME_EMAIL, GROQ_API_KEY
+nano .env                        # DOMAIN, ACME_EMAIL, GROQ_API_KEY, ADMIN_GITHUB_LOGIN
 make secrets prod-secrets        # generates every password and token into .env
 ```
+
+**GitHub sign-in** (optional; without it, accounts sign in with a password):
+
+1. GitHub → **Settings → Developer settings → OAuth Apps → New OAuth App**.
+   Homepage URL `https://<domain>`, Authorization callback URL
+   `https://<domain>/api/auth/github/callback`.
+2. **Generate a new client secret**, then put both values in `.env` on the server:
+   `GITHUB_CLIENT_ID=...` and `GITHUB_CLIENT_SECRET=...`.
+3. GitHub only signs in accounts that already exist (D56). An account matches a GitHub user by
+   the GitHub user name an admin gave it, or by a verified GitHub email equal to the account's
+   email; the first sign-in records GitHub's numeric user id, which later sign-ins must match
+   (so a renamed or recycled user name cannot take the account over). `ADMIN_GITHUB_LOGIN`
+   links the admin account; add other people on the **Users** page.
 
 The admin and demo passwords are now in `.env` (`ADMIN_PASSWORD`, `DEMO_PASSWORD`). Keep a
 copy in your password manager.

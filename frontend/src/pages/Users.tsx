@@ -42,7 +42,7 @@ export default function Users() {
           <table className="tabular w-full text-left text-xs">
             <thead>
               <tr className="border-b border-hairline text-ink-2">
-                {['User', 'Email', 'Platform role', ...packs.data.map((p) => p.display_name.split(' (')[0]), 'Status', 'Last sign-in', ''].map((h) => (
+                {['User', 'Email', 'GitHub', 'Platform role', ...packs.data.map((p) => p.display_name.split(' (')[0]), 'Status', 'Last sign-in', ''].map((h) => (
                   <th key={h} className="py-1.5 pr-4 font-medium">
                     {h}
                   </th>
@@ -59,6 +59,7 @@ export default function Users() {
                       {u.name} <span className="text-ink-muted">({u.user_id})</span>
                     </td>
                     <td className="py-1.5 pr-4 text-ink-2">{u.email}</td>
+                    <td className="py-1.5 pr-4 text-ink-2">{u.github_login ?? '–'}</td>
                     <td className="py-1.5 pr-4 capitalize text-ink">{u.platform_role}</td>
                     {packs.data.map((p) => (
                       <td key={p.domain} className="py-1.5 pr-4 text-ink-2">
@@ -137,12 +138,14 @@ function EditRow({
   const [active, setActive] = useState(user.active)
   const [packRoles, setPackRoles] = useState(user.pack_roles)
   const [password, setPassword] = useState('')
+  const [githubLogin, setGithubLogin] = useState(user.github_login ?? '')
   const save = useMutation({
     mutationFn: () =>
       authApi.updateUser(user.user_id, {
         platform_role: role,
         active,
         pack_roles: Object.fromEntries(Object.entries(packRoles).filter(([, v]) => v)),
+        github_login: githubLogin.trim(),
         ...(password ? { password } : {}),
       }),
     onSuccess: () => {
@@ -152,7 +155,7 @@ function EditRow({
   })
   return (
     <tr className="border-b border-hairline bg-ghost/50">
-      <td colSpan={5 + packs.length} className="p-3">
+      <td colSpan={6 + packs.length} className="p-3">
         <div className="mb-2 text-xs font-semibold text-ink">
           {user.name} ({user.user_id})
         </div>
@@ -170,6 +173,10 @@ function EditRow({
             <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> Active
           </label>
           <label className="flex flex-col gap-0.5 text-[11px] text-ink-muted">
+            GitHub user (optional)
+            <input value={githubLogin} onChange={(e) => setGithubLogin(e.target.value)} placeholder="e.g. octocat" className="rounded-md border border-hairline bg-surface px-1.5 py-1 text-xs text-ink" />
+          </label>
+          <label className="flex flex-col gap-0.5 text-[11px] text-ink-muted">
             New password (optional)
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={10} placeholder="≥ 10 characters" className="rounded-md border border-hairline bg-surface px-1.5 py-1 text-xs text-ink" />
           </label>
@@ -180,7 +187,7 @@ function EditRow({
             Cancel
           </button>
         </div>
-        <p className="mt-2 text-[11px] text-ink-muted">Deactivating or resetting a password signs the user out everywhere.</p>
+        <p className="mt-2 text-[11px] text-ink-muted">Deactivating or resetting a password signs the user out everywhere. Changing the GitHub user links the account to whoever signs in with the new name next.</p>
         {save.error && <p className="mt-1 text-xs text-critical">{(save.error as Error).message}</p>}
       </td>
     </tr>
@@ -189,11 +196,17 @@ function EditRow({
 
 function NewUser({ packs, businessRoles }: { packs: { domain: string; display_name: string }[]; businessRoles: Record<string, string[]> }) {
   const qc = useQueryClient()
-  const blank = { user_id: '', email: '', name: '', platform_role: 'viewer', password: '' }
+  const blank = { user_id: '', email: '', name: '', platform_role: 'viewer', password: '', github_login: '' }
   const [f, setF] = useState(blank)
   const [packRoles, setPackRoles] = useState<Record<string, string>>({})
   const create = useMutation({
-    mutationFn: () => authApi.createUser({ ...f, pack_roles: Object.fromEntries(Object.entries(packRoles).filter(([, v]) => v)) }),
+    mutationFn: () =>
+      authApi.createUser({
+        ...f,
+        password: f.password || undefined,
+        github_login: f.github_login.trim() || undefined,
+        pack_roles: Object.fromEntries(Object.entries(packRoles).filter(([, v]) => v)),
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['auth-users'] })
       setF(blank)
@@ -211,19 +224,23 @@ function NewUser({ packs, businessRoles }: { packs: { domain: string; display_na
         type={type}
         value={f[key]}
         onChange={(e) => setF({ ...f, [key]: e.target.value })}
-        required
+        required={key !== 'password' && key !== 'github_login'}
         className="rounded-md border border-hairline bg-surface px-2 py-1 text-xs text-ink"
         {...extra}
       />
     </label>
   )
   return (
-    <Card title="Add a user" subtitle="A local account with a password. GitHub sign-in can be added to the same accounts at deployment.">
+    <Card
+      title="Add a user"
+      subtitle="Give a GitHub user name, an initial password, or both. With GitHub, the person signs in with GitHub (a verified GitHub email equal to the account's email also works). Nobody can create their own account."
+    >
       <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
         {field('user_id', 'Handle (e.g. j.doe)', 'text', { pattern: '[a-z][a-z0-9._-]{1,40}' })}
         {field('name', 'Name')}
         {field('email', 'Email', 'email')}
-        {field('password', 'Initial password', 'password', { minLength: 10 })}
+        {field('github_login', 'GitHub user', 'text', { placeholder: 'e.g. octocat' })}
+        {field('password', 'Initial password', 'password', { minLength: 10, placeholder: 'optional with GitHub' })}
         <label className="flex flex-col gap-0.5 text-[11px] text-ink-muted">
           Platform role
           <select value={f.platform_role} onChange={(e) => setF({ ...f, platform_role: e.target.value })} className="rounded-md border border-hairline bg-surface px-1.5 py-1 text-xs text-ink">

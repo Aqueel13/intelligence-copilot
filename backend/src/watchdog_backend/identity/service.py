@@ -1,6 +1,7 @@
 """Accounts, sessions and the current principal."""
 
 import hashlib
+import re
 import secrets
 import time
 from contextvars import ContextVar
@@ -24,6 +25,7 @@ class UserOut(BaseModel):
     active: bool
     pack_roles: dict[str, str]  # domain -> business role
     last_login_at: datetime | None = None
+    github_login: str | None = None  # GitHub user name allowed to sign in as this account
 
 
 @dataclass(frozen=True)
@@ -86,6 +88,7 @@ def _users(
 ) -> list[UserOut]:
     rows = conn.execute(
         text(f"""SELECT u.user_id, u.email, u.name, u.platform_role, u.active, u.last_login_at,
+                        u.github_login,
                         coalesce(jsonb_object_agg(r.domain, r.business_role)
                                  FILTER (WHERE r.domain IS NOT NULL), '{{}}') AS pack_roles
                  FROM identity.users u
@@ -116,6 +119,7 @@ def create_user(
     platform_role: str,
     password: str | None,
     pack_roles: dict[str, str] | None = None,
+    github_login: str | None = None,
 ) -> UserOut:
     if platform_role not in rbac.ROLES:
         raise IdentityError("invalid", f"Unknown platform role '{platform_role}'")
@@ -130,15 +134,18 @@ def create_user(
     ).first()
     if exists:
         raise IdentityError("conflict", "A user with this id or email already exists")
+    github_login = _check_github_login(conn, github_login, user_id)
     conn.execute(
-        text("""INSERT INTO identity.users (user_id, email, name, password_hash, platform_role)
-                VALUES (:id, lower(:e), :n, :h, :r)"""),
+        text("""INSERT INTO identity.users
+                    (user_id, email, name, password_hash, platform_role, github_login)
+                VALUES (:id, lower(:e), :n, :h, :r, :g)"""),
         {
             "id": user_id,
             "e": email,
             "n": name,
             "h": hash_password(password) if password else None,
             "r": platform_role,
+            "g": github_login,
         },
     )
     _set_pack_roles(conn, user_id, pack_roles or {})
@@ -163,6 +170,15 @@ def update_user(conn: Connection, user_id: str, **changes: Any) -> UserOut:
             raise IdentityError("invalid", str(exc)) from exc
         sets.append("password_hash = :h")
         params["h"] = hash_password(changes["password"])
+    if "github_login" in changes and changes["github_login"] is not None:
+        # "" removes the link. A changed user name also forgets the recorded GitHub id, so the
+        # next GitHub sign-in links the account to whoever holds the new name.
+        login = _check_github_login(conn, changes["github_login"], user_id)
+        sets.append(
+            "github_login = :g, github_id = CASE WHEN lower(github_login) "
+            "IS NOT DISTINCT FROM lower(CAST(:g AS text)) THEN github_id END"
+        )
+        params["g"] = login
     if sets:
         conn.execute(
             text(f"UPDATE identity.users SET {', '.join(sets)} WHERE user_id = :id"), params
@@ -185,6 +201,63 @@ def _set_pack_roles(conn: Connection, user_id: str, roles: dict[str, str]) -> No
                         VALUES (:id, :d, :r)"""),
                 {"id": user_id, "d": domain, "r": role},
             )
+
+
+GITHUB_LOGIN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$")
+
+
+def _check_github_login(conn: Connection, login: str | None, user_id: str) -> str | None:
+    """A valid GitHub user name not linked to another account; None/"" = no link."""
+    login = (login or "").strip().removeprefix("@")
+    if not login:
+        return None
+    if not GITHUB_LOGIN.match(login):
+        raise IdentityError("invalid", f"'{login}' is not a valid GitHub user name")
+    taken = conn.execute(
+        text("""SELECT user_id FROM identity.users
+                WHERE lower(github_login) = lower(:g) AND user_id <> :id"""),
+        {"g": login, "id": user_id},
+    ).first()
+    if taken:
+        raise IdentityError("conflict", f"GitHub user '{login}' is already linked to {taken[0]}")
+    return login
+
+
+def github_account(conn: Connection, github_id: int, login: str, emails: list[str]) -> UserOut:
+    """The account a GitHub identity may sign in as. Matched, in order, by the GitHub id
+    recorded at an earlier sign-in, the GitHub user name an admin entered, or a verified GitHub
+    email equal to the account's email. Never creates an account (D56). The first match records
+    the GitHub id; an account already linked to a different GitHub id is refused."""
+    params = {"id": github_id, "g": login, "e": [e.lower() for e in emails]}
+    row = None
+    for where in (
+        "github_id = :id",
+        "lower(github_login) = lower(:g)",
+        "github_login IS NULL AND lower(email) = ANY(CAST(:e AS text[]))",
+    ):
+        row = (
+            conn.execute(
+                text(f"SELECT user_id, github_id, active FROM identity.users WHERE {where}"),
+                params,
+            )
+            .mappings()
+            .first()
+        )
+        if row:
+            break
+    if row is None:
+        raise IdentityError("not_found", "No account for this GitHub user")
+    if row["github_id"] is not None and row["github_id"] != github_id:
+        raise IdentityError("conflict", "This account is linked to a different GitHub user")
+    if not row["active"]:
+        raise IdentityError("forbidden", "This account is deactivated")
+    conn.execute(
+        text("""UPDATE identity.users SET github_id = :id, auth_provider = 'github'
+                WHERE user_id = :u AND github_id IS NULL"""),
+        {"id": github_id, "u": row["user_id"]},
+    )
+    conn.commit()
+    return get_user(conn, row["user_id"])  # type: ignore[return-value]
 
 
 def admin_count(conn: Connection) -> int:
@@ -214,13 +287,18 @@ def login(conn: Connection, email: str, password: str) -> tuple[str, UserOut]:
     if not row or not ok or not row["active"]:
         time.sleep(0.3)  # same response, same-ish time, for every failure
         raise IdentityError("unauthorized", "Wrong email or password")
-    token = create_session(conn, row["user_id"])
+    return start_session(conn, row["user_id"])
+
+
+def start_session(conn: Connection, user_id: str) -> tuple[str, UserOut]:
+    """A new session for a user who has proved who they are (password or GitHub)."""
+    token = create_session(conn, user_id)
     conn.execute(
         text("UPDATE identity.users SET last_login_at = now() WHERE user_id = :id"),
-        {"id": row["user_id"]},
+        {"id": user_id},
     )
     conn.commit()
-    return token, get_user(conn, row["user_id"])  # type: ignore[return-value]
+    return token, get_user(conn, user_id)  # type: ignore[return-value]
 
 
 def create_session(conn: Connection, user_id: str) -> str:

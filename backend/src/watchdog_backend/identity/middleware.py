@@ -13,7 +13,15 @@ from watchdog_backend.identity.service import VISITOR, reset_principal, resolve,
 from watchdog_backend.observability.context import traced
 
 COOKIE = "wd_session"
-PUBLIC = ("/api/health", "/api/auth/login", "/api/auth/logout", "/api/docs", "/api/openapi.json")
+PUBLIC = (
+    "/api/health",
+    "/api/auth/login",
+    "/api/auth/logout",
+    "/api/auth/providers",
+    "/api/auth/github/",  # sign-in start and callback
+    "/api/docs",
+    "/api/openapi.json",
+)
 
 
 def session_token(scope: Scope) -> str | None:
