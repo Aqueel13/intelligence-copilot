@@ -2,9 +2,10 @@
 #
 # Differs from docker-compose.yml (development): code is baked into the images (no source
 # mounts, no reload); the frontend is built once and served by Caddy, which also terminates
-# HTTPS (certificates from Let's Encrypt, renewed automatically); only Caddy publishes ports;
-# no Ollama (the server has no GPU: models come from Groq); the Analytics and Knowledge MCP
-# servers, which only serve external clients, are not started.
+# HTTPS (certificates from Let's Encrypt, renewed automatically); only Caddy publishes ports
+# to the internet; no Ollama (the server has no GPU: models come from Groq). The MCP servers
+# publish on the server's loopback only, for MCP clients over an SSH tunnel; the read-only
+# Analytics and Knowledge servers start only with COMPOSE_PROFILES=mcp in .env.
 name: watchdog
 
 x-logging: &logging
@@ -42,7 +43,10 @@ x-backend-env: &backend-env
   DEMO_PASSWORD: ${DEMO_PASSWORD:-}
   OPERATIONS_MCP_URL: http://operations-mcp:8103/mcp
   OPERATIONS_MCP_BACKEND_TOKEN: ${OPERATIONS_MCP_BACKEND_TOKEN:?run make secrets}
-  OPERATIONS_MCP_TOKENS: '{"${OPERATIONS_MCP_BACKEND_TOKEN}": "watchdog-backend"}'
+  # External MCP clients (over an SSH tunnel): an empty token is never accepted.
+  OPERATIONS_MCP_TOKENS: '{"${OPERATIONS_MCP_BACKEND_TOKEN}": "watchdog-backend", "${OPERATIONS_MCP_EXTERNAL_TOKEN:-}": "external-agent"}'
+  ANALYTICS_MCP_TOKENS: '{"${ANALYTICS_MCP_EXTERNAL_TOKEN:-}": "external-agent"}'
+  KNOWLEDGE_MCP_TOKENS: '{"${KNOWLEDGE_MCP_EXTERNAL_TOKEN:-}": "external-agent"}'
   ENTERPRISE_API_URL: http://enterprise-mock:8201
   ENTERPRISE_API_KEY: ${ENTERPRISE_API_KEY:?run make secrets}
 
@@ -105,10 +109,30 @@ services:
       start_period: 180s
       start_interval: 10s
 
-  # Governed actions; reachable only by the backend (not published).
+  # Governed actions, for the backend and for MCP clients over an SSH tunnel (published on
+  # the server's loopback only: never reachable from the internet).
   operations-mcp:
     <<: *backend
     command: ["uvicorn", "watchdog_backend.mcp_servers.operations:app", "--host", "0.0.0.0", "--port", "8103"]
+    ports:
+      - "127.0.0.1:8103:8103"
+
+  # Read-only MCP servers for external clients (loopback only, SSH tunnel). Opt-in: each is
+  # another Python process (Knowledge also loads the embedding model), too much for a 1 GB
+  # server by default. Enable with COMPOSE_PROFILES=mcp in .env.
+  analytics-mcp:
+    <<: *backend
+    profiles: ["mcp"]
+    command: ["uvicorn", "watchdog_backend.mcp_servers.analytics:app", "--host", "0.0.0.0", "--port", "8101"]
+    ports:
+      - "127.0.0.1:8101:8101"
+
+  knowledge-mcp:
+    <<: *backend
+    profiles: ["mcp"]
+    command: ["uvicorn", "watchdog_backend.mcp_servers.knowledge:app", "--host", "0.0.0.0", "--port", "8102"]
+    ports:
+      - "127.0.0.1:8102:8102"
 
   watcher:
     <<: *backend

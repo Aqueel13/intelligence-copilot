@@ -131,15 +131,37 @@ runs from `showcase/showcase_runs.json`. Copy the backups off the server now and
 make prod-update                 # git pull, rebuild, restart; migrations run before the backend
 ```
 
+## 7. MCP clients (SSH tunnel)
+
+The MCP servers are not on the internet: reach them through an SSH tunnel. Operations always
+runs; the read-only Analytics and Knowledge servers are opt-in (on a 1 GB server they compete
+with the app for memory).
+
+```bash
+# on the server, once
+make secrets                              # adds the *_MCP_EXTERNAL_TOKEN values if missing
+echo 'COMPOSE_PROFILES=mcp' >> .env       # optional: also start Analytics and Knowledge
+make prod-start                           # or make prod-up (recreates what changed)
+grep _MCP_EXTERNAL_TOKEN= .env            # the tokens your client needs
+
+# on your machine: keep this running while you use the servers
+ssh -N -L 8101:localhost:8101 -L 8102:localhost:8102 -L 8103:localhost:8103 ubuntu@<server-ip>
+```
+
+Then register the servers as in the README ("Connect an MCP client"), with the tokens from the
+**server's** `.env`. Operations calls are audited as `external-agent`; there is no approve tool.
+To turn the read-only servers off again, remove the `COMPOSE_PROFILES` line and run
+`docker compose -f docker-compose.prod.yml --profile mcp stop analytics-mcp knowledge-mcp`.
+
 ## Operating notes
 
 - **Logs:** `make prod-logs`; container logs rotate at 5 × 20 MB per service.
 - **Token budget:** Groq's free tier allows about 200k tokens per model per day. The rate
   limits (`RATE_LIMIT_*`) are sized for it; the Observability page shows the day's use.
   Showcase replays and cache hits cost nothing.
-- **Not exposed:** Postgres, the backend, the MCP servers and the enterprise mock are reachable
-  only inside the Docker network. The Analytics and Knowledge MCP servers (for external MCP
-  clients) are not started in production.
+- **Not exposed:** Postgres, the backend and the enterprise mock are reachable only inside the
+  Docker network. The MCP servers listen on the server's loopback (127.0.0.1) only, for MCP
+  clients over an SSH tunnel (below); the firewall never needs ports 8101-8103.
 - **Certificates** live in the `caddy_data` volume. Keep it: deleting it makes Caddy request
   new certificates, and Let's Encrypt limits how many it issues per week.
 - **Refreshing the showcase runs** (after an engine change): record them on a development
