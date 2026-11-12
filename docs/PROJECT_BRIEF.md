@@ -82,6 +82,7 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 | D57 | **Annualise from the months an effect applies to** | The what-if spread a period's avoided breaches over the whole window, which is right for a steady problem but undervalued one that began recently: restoring the weekly payment run (3 of 18 months) showed as not cost-effective in 10 of 12 P2P runs. Now the run of affected months at the end of the window decides: it covers the window → the whole window; the same months a year earlier were affected too (a season, e.g. the monsoon) → the latest 12 months; otherwise a change that began then → its current run-rate. Restoring the run is now worth about ₹23 lakh a year net, and the senior-queue actions are valued at their rate since April 2026. Each recommendation states its basis. |
 | D58 | **Visitors read everything without signing in; running anything needs an account** | Not signed in = a built-in, read-only `visitor` role: every screen, the audit log, process and policy search, and replays of showcase runs. Anything that changes data or spends model tokens (investigate, ask, explore, propose, approve, run monitors) answers 401 "Sign in to …"; the UI says the same and offers a sign-in overlay. Sign-in is for accounts an admin created (D56), so a visitor can never create one. The role is not stored or assignable. Policy Q&A moved from "any signed-in role" to an explicit `ask` permission, since it spends tokens. `ANONYMOUS_VISITORS=false` restores sign-in for everything. This answers the deployment question of how the public sees the demo. |
 | D59 | **Showcase runs ship with the code** | They are recorded locally, where the model is free, and replayed on the public deployment. `make showcase-export` writes every showcase run (with its recorded stream) to `showcase/showcase_runs.json`, which is committed; `make showcase-import` loads it, keeping the run ids (links stay valid; a second import updates in place). The file carries each pack's data fingerprint, and an import into a database with different data is refused unless forced, so a replay never cites numbers that are not there. Imported runs get no cache key: they replay, but never stand in for a fresh investigation whose engine or models may differ. Checked end to end: a fresh database seeded with the defaults accepts the committed file. |
+| D60 | **One server, Docker Compose, Caddy in front** | `docker-compose.prod.yml` on one Oracle Always Free ARM VM (4 OCPU, 24 GB): the same images as development with the code baked in, Caddy as the only public service (built frontend, `/api` proxy, automatic Let's Encrypt HTTPS, security headers), Postgres and the MCP servers unreachable from outside, models from Groq (no GPU). Kubernetes or a managed platform would add cost and moving parts for a single-instance demo. Data is regenerated from the seed on the server and showcase runs imported (D59), not copied; the database is backed up daily with `pg_dump`. Runbook: `docs/DEPLOYMENT.md`. |
 
 ## 4. Product shape
 
@@ -361,8 +362,9 @@ Accounts and two-layer RBAC (D43, D44), built-in observability (D45), the policy
 limits (D49), the Analytics and Knowledge MCP servers (D50), exploratory SQL (D51) and
 automatic triage of alerts (D52), then 18-month data with new patterns (D53-D55) admin-only accounts (D56) annualisation by basis (D57) and read-only visitors (D58) and showcase export/import (D59). 275 backend tests pass.
 
-Remaining M8: public deployment (hosting, HTTPS, GitHub sign-in) and the video. Everything the
-deployment needs from the app itself (showcase runs, limits, secure cookies) is in place.
+Production setup built (D60): compose file, Caddy with HTTPS, server setup and backup scripts,
+runbook; verified end to end locally. Remaining M8: provisioning the server, GitHub sign-in,
+showcase runs refreshed after D57, and the video.
 
 ## 10. Open questions
 

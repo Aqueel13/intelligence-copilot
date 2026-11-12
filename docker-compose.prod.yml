@@ -1,0 +1,136 @@
+# Public deployment (one server). Usage: see docs/DEPLOYMENT.md, or `make prod-up`.
+#
+# Differs from docker-compose.yml (development): code is baked into the images (no source
+# mounts, no reload); the frontend is built once and served by Caddy, which also terminates
+# HTTPS (certificates from Let's Encrypt, renewed automatically); only Caddy publishes ports;
+# no Ollama (the server has no GPU: models come from Groq); the Analytics and Knowledge MCP
+# servers, which only serve external clients, are not started.
+name: watchdog
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "20m", max-file: "5" }
+
+x-backend-env: &backend-env
+  APP_ENV: production
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-watchdog}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-watchdog}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  COOKIE_SECURE: "true"
+  CORS_ORIGINS: https://${DOMAIN:?set DOMAIN in .env}
+  FORWARDED_ALLOW_IPS: "*"   # only Caddy can reach the backend; trust its X-Forwarded-*
+  LLM_DEFAULT_MODEL: "${LLM_DEFAULT_MODEL:?set LLM_DEFAULT_MODEL in .env, a groq model}"
+  LLM_MODELS: ${LLM_MODELS:-{}}
+  LLM_LIGHT_MODEL: ${LLM_LIGHT_MODEL:-}
+  LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-4}
+  RATE_LIMIT_INVESTIGATIONS_PER_USER_HOUR: ${RATE_LIMIT_INVESTIGATIONS_PER_USER_HOUR:-4}
+  RATE_LIMIT_INVESTIGATIONS_PER_DAY: ${RATE_LIMIT_INVESTIGATIONS_PER_DAY:-12}
+  RATE_LIMIT_QUESTIONS_PER_USER_HOUR: ${RATE_LIMIT_QUESTIONS_PER_USER_HOUR:-20}
+  RATE_LIMIT_QUESTIONS_PER_DAY: ${RATE_LIMIT_QUESTIONS_PER_DAY:-80}
+  WATCH_AUTO_INVESTIGATE: ${WATCH_AUTO_INVESTIGATE:-critical}
+  ANONYMOUS_VISITORS: ${ANONYMOUS_VISITORS:-true}
+  GROQ_API_KEY: ${GROQ_API_KEY:?set GROQ_API_KEY in .env}
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@watchdog.local}
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+  DEMO_PASSWORD: ${DEMO_PASSWORD:-}
+  OPERATIONS_MCP_URL: http://operations-mcp:8103/mcp
+  OPERATIONS_MCP_BACKEND_TOKEN: ${OPERATIONS_MCP_BACKEND_TOKEN:?run make secrets}
+  OPERATIONS_MCP_TOKENS: '{"${OPERATIONS_MCP_BACKEND_TOKEN}": "watchdog-backend"}'
+  ENTERPRISE_API_URL: http://enterprise-mock:8201
+  ENTERPRISE_API_KEY: ${ENTERPRISE_API_KEY:?run make secrets}
+
+# Read-only repository content the app reads at run time (resolved from /app as ../<dir>).
+x-repo-mounts: &repo-mounts
+  - ./domain_packs:/domain_packs:ro
+  - ./datasets:/datasets            # generated data (make prod-seed writes it)
+  - ./.cache:/.cache                # embedding/reranker model files (downloaded once)
+  - ./evaluation:/evaluation:ro     # saved evaluation runs (Models page)
+  - ./showcase:/showcase            # showcase runs (import, and export after a refresh)
+
+x-backend: &backend
+  build: ./backend
+  image: watchdog-backend:prod
+  environment: *backend-env
+  volumes: *repo-mounts
+  logging: *logging
+  restart: unless-stopped
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-watchdog}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-watchdog}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging: *logging
+    restart: unless-stopped
+
+  migrate:
+    build: ./backend
+    image: watchdog-backend:prod
+    command: ["alembic", "upgrade", "head"]
+    environment: *backend-env
+    logging: *logging
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    <<: *backend
+    command: ["uvicorn", "watchdog_backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  # Governed actions; reachable only by the backend (not published).
+  operations-mcp:
+    <<: *backend
+    command: ["uvicorn", "watchdog_backend.mcp_servers.operations:app", "--host", "0.0.0.0", "--port", "8103"]
+
+  watcher:
+    <<: *backend
+    command: ["python", "-m", "watchdog_backend.watch", "--every", "${WATCH_INTERVAL_SECONDS:-3600}"]
+
+  enterprise-mock:
+    <<: *backend
+    command: ["uvicorn", "watchdog_backend.enterprise_mock.app:app", "--host", "0.0.0.0", "--port", "8201"]
+
+  # The only public service: HTTPS, the built frontend, and /api proxied to the backend.
+  caddy:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    image: watchdog-web:prod
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env (certificate expiry notices)}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data      # certificates: keep, or Let's Encrypt rate limits bite
+      - caddy_config:/config
+    logging: *logging
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

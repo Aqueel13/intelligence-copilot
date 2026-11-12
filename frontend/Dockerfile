@@ -1,4 +1,4 @@
-# Development image: runs the Vite dev server. A production (static + Nginx) image comes in M8.
+# Development image: runs the Vite dev server. Production: Dockerfile.prod (built, served by Caddy).
 FROM node:24-slim
 
 WORKDIR /app

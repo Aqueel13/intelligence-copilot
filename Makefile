@@ -1,4 +1,4 @@
-.PHONY: secrets users showcase-export showcase-import watch eval eval-report up down logs ps test lint fmt check migrate data knowledge seed psql reset-db
+.PHONY: prod-secrets prod-up prod-down prod-logs prod-ps prod-seed prod-showcase-import prod-showcase-export prod-backup prod-update secrets users showcase-export showcase-import watch eval eval-report up down logs ps test lint fmt check migrate data knowledge seed psql reset-db
 
 secrets:       ## Add any missing generated secrets to .env (never overwrites existing ones)
 	@for k in OPERATIONS_MCP_BACKEND_TOKEN OPERATIONS_MCP_EXTERNAL_TOKEN ANALYTICS_MCP_EXTERNAL_TOKEN KNOWLEDGE_MCP_EXTERNAL_TOKEN ENTERPRISE_API_KEY ADMIN_PASSWORD DEMO_PASSWORD; do \
@@ -68,3 +68,41 @@ psql:          ## Open a psql shell in the database container
 
 reset-db:      ## DANGER: delete all local database data
 	docker compose down -v
+
+# ---------------------------------------------------------------- production (docs/DEPLOYMENT.md)
+PROD = docker compose -f docker-compose.prod.yml
+PROD_RUN = $(PROD) run --rm --no-deps backend
+
+prod-secrets:  ## Production: add a generated POSTGRES_PASSWORD to .env if it has none
+	@grep -qE "^POSTGRES_PASSWORD=.+" .env || { sed -i "/^POSTGRES_PASSWORD=$$/d" .env; \
+	  echo "POSTGRES_PASSWORD=$$(openssl rand -hex 24)" >> .env; echo "added POSTGRES_PASSWORD"; }
+
+prod-up:       ## Production: build and start (or update) the stack
+	$(PROD) up --build -d
+
+prod-down:     ## Production: stop the stack (data and certificates are kept)
+	$(PROD) down
+
+prod-logs:     ## Production: follow logs of every service
+	$(PROD) logs -f --tail 100
+
+prod-ps:
+	$(PROD) ps
+
+prod-seed:     ## Production: data, policy documents and accounts (run once, after prod-up)
+	$(PROD_RUN) python -m watchdog_backend.generator --load
+	$(PROD_RUN) python -m watchdog_backend.knowledge ingest
+	$(PROD_RUN) python -m watchdog_backend.identity seed
+
+prod-showcase-import: ## Production: load showcase/showcase_runs.json (after prod-seed)
+	$(PROD_RUN) python -m watchdog_backend.investigation showcase-import
+
+prod-showcase-export: ## Production: write the server's showcase runs to showcase/showcase_runs.json
+	$(PROD_RUN) python -m watchdog_backend.investigation showcase-export
+
+prod-backup:   ## Production: dump the database to backups/ (keeps the newest 14)
+	deploy/backup.sh
+
+prod-update:   ## Production: pull the latest code, rebuild, restart (migrations run first)
+	git pull --ff-only
+	$(PROD) up --build -d

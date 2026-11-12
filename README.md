@@ -141,6 +141,11 @@ The LLM defaults to a local model through [Ollama](https://ollama.com)
 (`ollama pull qwen2.5:7b`). Set `LLM_DEFAULT_MODEL` / `LLM_MODELS` in `.env` to use Groq or
 Gemini instead.
 
+## Deploy
+
+One server with Docker Compose, Caddy in front for HTTPS: `docker-compose.prod.yml`, the
+`make prod-*` targets and the step-by-step runbook in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
 ## Connect an MCP client
 
 Three servers, each on localhost only with its own token from `.env` (`make secrets`):

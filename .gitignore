@@ -34,3 +34,6 @@ datasets/generated/
 
 # Evaluation smoke runs (real results under evaluation/results/ are committed)
 evaluation/results/smoke*/
+
+# Production database backups (deploy/backup.sh)
+backups/
