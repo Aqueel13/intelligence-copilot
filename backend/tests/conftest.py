@@ -117,3 +117,36 @@ def client_as(accounts):
         return client
 
     return make
+
+
+# --- Procure-to-pay: the second pack, loaded beside the insurance data -------------------
+
+
+@pytest.fixture(scope="session")
+def p2p_pack():
+    from watchdog_backend.domain.pack import get_pack
+
+    return get_pack("procure_to_pay")
+
+
+@pytest.fixture(scope="session")
+def p2p_dataset(p2p_pack):
+    from watchdog_backend.generator.registry import generate
+
+    return generate(p2p_pack, seed=42)
+
+
+@pytest.fixture(scope="session")
+def p2p_db(db_engine, p2p_dataset):
+    """The test database with the P2P dataset and documents loaded beside the insurance data.
+    Shared, so any test that reads P2P data can ask for it (a fresh CI database has none)."""
+    from watchdog_backend.domain.pack import use_domain
+    from watchdog_backend.generator.loader import load_dataset
+    from watchdog_backend.knowledge.ingest import ingest_directory
+    from watchdog_backend.knowledge.models import get_embedder
+    from watchdog_backend.knowledge.service import documents_dir
+
+    load_dataset(db_engine, p2p_dataset)
+    with use_domain("procure_to_pay"), db_engine.begin() as conn:
+        ingest_directory(conn, "procure_to_pay", documents_dir(), get_embedder())
+    return db_engine

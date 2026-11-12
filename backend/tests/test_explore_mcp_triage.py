@@ -36,7 +36,7 @@ def _cases(db_engine, domain: str) -> int:
         ).scalar_one()
 
 
-def test_explore_reads_only_the_active_packs_views(db_engine, pack) -> None:
+def test_explore_reads_only_the_active_packs_views(db_engine, pack, p2p_db) -> None:
     r = explore.run(
         "select attributes->>'channel' as channel, count(*) as n from cases group by 1 order by 1"
     )
@@ -127,7 +127,7 @@ async def _mcp(module: str, port: int, token: str, tool: str, args: dict):
 
 @pytest.mark.anyio
 async def test_analytics_mcp_is_read_only_and_matches_the_metrics_engine(
-    db_engine, mcp_tokens
+    db_engine, mcp_tokens, p2p_db
 ) -> None:
     tools = await _mcp("analytics", 8101, ANALYTICS_TOKEN, "__list__", {})
     assert all(t.annotations.read_only_hint for t in tools)

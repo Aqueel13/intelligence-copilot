@@ -18,7 +18,6 @@ from watchdog_backend.domain.pack import (
     use_domain,
 )
 from watchdog_backend.generator.procure_to_pay import GeneratorConfig, ProcureToPayGenerator
-from watchdog_backend.generator.registry import generate
 from watchdog_backend.investigation import llm
 from watchdog_backend.investigation.actions import evaluate_action, get_catalogue
 from watchdog_backend.investigation.data import load_frames
@@ -40,30 +39,6 @@ from .test_investigation_graph import ScriptedModel
 
 P2P = "procure_to_pay"
 PERIOD = "2026-09"
-
-
-@pytest.fixture(scope="module")
-def p2p_pack():
-    return get_pack(P2P)
-
-
-@pytest.fixture(scope="module")
-def p2p_dataset(p2p_pack):
-    return generate(p2p_pack, seed=42)
-
-
-@pytest.fixture(scope="module")
-def p2p_db(db_engine, p2p_dataset):
-    """The test database with the P2P dataset and documents loaded beside the insurance data."""
-    from watchdog_backend.generator.loader import load_dataset
-    from watchdog_backend.knowledge.ingest import ingest_directory
-    from watchdog_backend.knowledge.models import get_embedder
-    from watchdog_backend.knowledge.service import documents_dir
-
-    load_dataset(db_engine, p2p_dataset)
-    with use_domain(P2P), db_engine.begin() as conn:
-        ingest_directory(conn, P2P, documents_dir(), get_embedder())
-    return db_engine
 
 
 @pytest.fixture(scope="module")
