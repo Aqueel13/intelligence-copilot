@@ -60,6 +60,33 @@ def stream_investigation(
     key: str | None = None,
 ) -> Iterator[str]:
     """Generator for a StreamingResponse. Uses its own connections (it outlives the request)."""
+    for event, data in investigation_events(question, scope, user, key):
+        yield _sse(event, data)
+
+
+def run_investigation(
+    question: str,
+    scope: ProcessQuery,
+    user: dict[str, str | None] | None = None,
+    key: str | None = None,
+) -> tuple[str, str | None]:
+    """Run to completion without streaming (automatic triage). (investigation id, error)."""
+    inv_id, error = "", None
+    for event, data in investigation_events(question, scope, user, key):
+        if event == "start":
+            inv_id = data["id"]
+        elif event == "error":
+            error = data["message"]
+    return inv_id, error
+
+
+def investigation_events(
+    question: str,
+    scope: ProcessQuery,
+    user: dict[str, str | None] | None = None,
+    key: str | None = None,
+) -> Iterator[tuple[str, Any]]:
+    """Run an investigation, persisting it, yielding (event, data) as it progresses."""
     engine = get_engine()
     domain = get_pack().domain
     started = time.perf_counter()
@@ -82,7 +109,7 @@ def stream_investigation(
                 "u": user_id,
             },
         ).scalar_one()
-    yield _sse("start", {"id": str(inv_id), "models": deps_models})
+    yield "start", {"id": str(inv_id), "models": deps_models}
 
     state: dict[str, Any] = {"question": question, "scope": scope.model_dump(mode="json")}
     events: list[dict[str, Any]] = []
@@ -92,7 +119,7 @@ def stream_investigation(
             for node, update in run(build_deps(conn, trace), question, scope):
                 state.update(update)
                 events.append(jsonable_encoder({"node": node, "update": update}))
-                yield _sse("step", events[-1])
+                yield "step", events[-1]
         result = jsonable_encoder({k: v for k, v in state.items() if k not in ("question",)})
         with engine.begin() as conn:
             conn.execute(
@@ -110,7 +137,7 @@ def stream_investigation(
                     "ms": int((time.perf_counter() - started) * 1000),
                 },
             )
-        yield _sse("done", {"id": str(inv_id)})
+        yield "done", {"id": str(inv_id)}
     except Exception as exc:  # report every failure to the client and record it
         message = str(exc)[:500]
         with engine.begin() as conn:
@@ -122,7 +149,7 @@ def stream_investigation(
                 """),
                 {"id": inv_id, "e": message, "ms": int((time.perf_counter() - started) * 1000)},
             )
-        yield _sse("error", {"id": str(inv_id), "message": message})
+        yield "error", {"id": str(inv_id), "message": message}
 
 
 def replay_investigation(

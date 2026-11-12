@@ -223,6 +223,7 @@ def test_stream_and_fetch_investigation(db_engine, kb, monkeypatch, client_as) -
         json={
             "question": "Why are broker claims breaching?",
             "scope": {"filters": {"channel": ["broker"]}},
+            "fresh": True,  # a new run, even if an earlier session cached this question
         },
     ).text
     events = [

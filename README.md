@@ -22,7 +22,9 @@ rule ruled out (MSME suppliers: the effect is explained by AP team).*
 ## What it does
 
 - **Watch:** KPI monitors with thresholds from the client's own policies. Alerts open,
-  update and resolve themselves; one click investigates.
+  update and resolve themselves. New critical alerts are triaged automatically: ranked by
+  severity and how far past threshold they are, and the top one investigated (within the
+  daily budget; an identical earlier run is linked instead). Any alert is one click away.
 - **Investigate:** a LangGraph workflow. Code scans for every significant pattern and runs
   every check, including confounder controls. The LLM writes hypotheses and judges the
   evidence. Rule overrides keep it honest in both directions.
@@ -49,6 +51,14 @@ Around the loop, the platform an enterprise would ask for:
   step.
 - **Rate limits** on requests that spend tokens only: per person per hour, and for everyone per
   day, sized for a free model tier (`RATE_LIMIT_*` settings). Cache hits and replays are free.
+- **Exploratory SQL, clearly labelled.** For questions no governed metric covers, analysts
+  write (or have a model draft) one read-only SELECT over the pack's cases, events and
+  feedback. It runs as a database role that can read nothing else, read-only, with a
+  5-second limit and 500-row cap, and the result is marked "not a verified metric".
+- **Three MCP servers.** Analytics (metrics, process mining, alerts, investigations,
+  exploratory SQL) and Knowledge (policy search and documents) are read-only; Operations
+  proposes and executes governed actions. Any MCP client gets the app's numbers, not a model's
+  estimates.
 - **Model comparison.** A page built from the saved evaluation runs, so every new run shows up.
 
 ## Results in one table
@@ -117,20 +127,29 @@ The LLM defaults to a local model through [Ollama](https://ollama.com)
 (`ollama pull qwen2.5:7b`). Set `LLM_DEFAULT_MODEL` / `LLM_MODELS` in `.env` to use Groq or
 Gemini instead.
 
-## Connect an MCP client to the Operations server
+## Connect an MCP client
 
-The Operations MCP server (`http://localhost:8103/mcp`, localhost only) lets any MCP client
-list a pack's action catalogue, propose actions and execute actions a person has approved. It
-has no approve tool. Use the `OPERATIONS_MCP_EXTERNAL_TOKEN` from `.env`, for example with
-Claude Code:
+Three servers, each on localhost only with its own token from `.env` (`make secrets`):
+
+| Server | URL | Token | Tools |
+|---|---|---|---|
+| Analytics (read-only) | `http://localhost:8101/mcp` | `ANALYTICS_MCP_EXTERNAL_TOKEN` | metrics, process map, variants, bottlenecks, alerts, investigations, exploratory SQL |
+| Knowledge (read-only) | `http://localhost:8102/mcp` | `KNOWLEDGE_MCP_EXTERNAL_TOKEN` | list, search and read policies and SOPs |
+| Operations | `http://localhost:8103/mcp` | `OPERATIONS_MCP_EXTERNAL_TOKEN` | action catalogue, propose, execute approved actions (no approve tool) |
+
+For example, with Claude Code:
 
 ```bash
-claude mcp add --transport http watchdog-ops http://localhost:8103/mcp \
-  --header "Authorization: Bearer $(grep ^OPERATIONS_MCP_EXTERNAL_TOKEN= .env | cut -d= -f2-)"
+for s in analytics:8101:ANALYTICS knowledge:8102:KNOWLEDGE ops:8103:OPERATIONS; do
+  IFS=: read name port var <<< "$s"
+  claude mcp add --transport http watchdog-$name http://localhost:$port/mcp \
+    --header "Authorization: Bearer $(grep ^${var}_MCP_EXTERNAL_TOKEN= .env | cut -d= -f2-)"
+done
 ```
 
-Tools take an optional `domain` (`insurance_claims`, `procure_to_pay`). Every call is recorded
-in the hash-chained audit log under the client's name.
+Tools take an optional `domain` (`insurance_claims`, `procure_to_pay`). Operations calls are
+recorded in the hash-chained audit log under the client's name. The Knowledge server returns
+passages, not answers, so it spends no LLM tokens.
 
 ## Repository layout
 
@@ -149,7 +168,7 @@ backend/            FastAPI app (src/watchdog_backend), Alembic migrations, test
   observability/    LLM-call and API-request recording, summaries, investigation traces
   watch/            KPI monitors, alerts, action follow-ups, next-month simulator (demo)
   evaluation/       harness: investigations vs planted truth, Q&A, retrieval, what-if
-  mcp_servers/      Operations MCP server (governed actions for any MCP client)
+  mcp_servers/      Analytics, Knowledge (read-only) and Operations (governed actions) MCP servers
   enterprise_mock/  stand-in for the client's systems of record
 domain_packs/       one folder per process: pack, metrics, monitors, actions, governance,
                     policy documents, benchmarks (insurance_claims, procure_to_pay)

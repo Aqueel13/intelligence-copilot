@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     operations_mcp_tokens: dict[str, str] = {}
     # The token the backend itself uses when it calls the Operations MCP server.
     operations_mcp_backend_token: str = ""
+    # Read-only MCP servers for external clients: {"token": "client name"} each.
+    analytics_mcp_tokens: dict[str, str] = {}
+    knowledge_mcp_tokens: dict[str, str] = {}
     enterprise_api_url: str = "http://localhost:8201"
     enterprise_api_key: str = ""
 
@@ -85,6 +88,12 @@ class Settings(BaseSettings):
     rate_limit_investigations_per_day: int = 12
     rate_limit_questions_per_user_hour: int = 20
     rate_limit_questions_per_day: int = 80
+
+    # Automatic triage: after monitors run, investigate the highest-priority new alerts.
+    # off | critical | all (warnings too); new investigations per pack per run (cache hits
+    # are linked for free and do not count). The daily investigation budget applies.
+    watch_auto_investigate: Literal["off", "critical", "all"] = "critical"
+    watch_auto_investigate_max_per_run: int = 1
 
     # Comma-separated list of allowed browser origins.
     cors_origins: str = "http://localhost:5173"

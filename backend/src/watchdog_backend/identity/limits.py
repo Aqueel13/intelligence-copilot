@@ -78,7 +78,7 @@ def check(conn: Connection, who: Principal, action: Action) -> None:
     """Raise RateLimited if another request of this kind would exceed a limit."""
     if exempt(who):
         return
-    what = "investigations" if action == "investigate" else "policy questions"
+    what = "investigations" if action == "investigate" else "questions"
     user, everyone = status(conn, who, action)
     if user.limit and user.used >= user.limit:
         raise RateLimited(

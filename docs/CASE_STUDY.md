@@ -42,7 +42,9 @@ an enterprise buyer:
 
 - **Watch.** Monitors defined in configuration, with thresholds taken from the client's own
   policies ("critical if above 24 hours for two consecutive months"). Alerts open, update and
-  resolve themselves; one click starts an investigation scoped to the alert.
+  resolve themselves. New critical alerts are triaged automatically: ranked, and the top one
+  investigated within a daily budget (an identical earlier run is linked instead). Any alert
+  can also be investigated with one click, scoped to the alert.
 - **Investigate.** A LangGraph workflow. Code scans the data for every significant pattern,
   the LLM turns patterns into hypotheses and picks checks from a fixed menu, code runs every
   check (segment comparisons, confounder controls, queue analysis, policy retrieval), and the
@@ -78,7 +80,8 @@ sentence might claim something the evidence does not.
 propose and execute, never approve. The person who proposed an action cannot approve it.
 Denials are recorded durably, and the audit log is a SHA-256 hash chain whose integrity can be
 verified. Any MCP client (Claude Desktop, another agent) gets exactly the same rules as the web
-app.
+app. Two more MCP servers are read-only: Analytics gives clients the app's own numbers
+(metrics, process mining, investigations) and Knowledge gives them the policy passages to cite.
 
 **4. Every capability is measured against ground truth.** Synthetic generators plant root
 causes and decoys, and keep an exact counterfactual for every case: the same case re-simulated
@@ -227,6 +230,7 @@ generator with a loader and spend its effort where it usually goes:
 ## Stack
 
 FastAPI · LangGraph · PostgreSQL 17 + pgvector · SQL-native process mining · hybrid retrieval
-(BGE embeddings + full-text, cross-encoder verification) · MCP (Operations server and client) ·
+(BGE embeddings + full-text, cross-encoder verification) · MCP (Analytics, Knowledge and
+Operations servers; client) ·
 React + TypeScript + Tailwind · Docker Compose · local Ollama and free-tier Groq/Gemini.
 220+ backend tests, CI on every push.

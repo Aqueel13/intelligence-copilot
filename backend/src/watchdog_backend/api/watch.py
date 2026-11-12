@@ -15,6 +15,7 @@ from watchdog_backend.identity.service import Principal
 from watchdog_backend.watch.engine import RunSummary, run_monitors
 from watchdog_backend.watch.followups import FollowUp, follow_ups
 from watchdog_backend.watch.simulate import SimulatedMonth, SimulationError, simulate_next_month
+from watchdog_backend.watch.triage import triage_in_background
 
 router = APIRouter(prefix="/watch", tags=["watch"])
 
@@ -36,6 +37,10 @@ class Alert(BaseModel):
     acknowledged_at: datetime | None
     resolved_at: datetime | None
     investigation_id: UUID | None
+    # Automatic triage: running | investigated | reused | skipped | failed (None: not triaged)
+    triage_status: str | None = None
+    triage_note: str | None = None
+    triaged_at: datetime | None = None
 
 
 class WatchStatus(BaseModel):
@@ -106,8 +111,12 @@ def status() -> WatchStatus:
 
 @router.post("/run", response_model=RunSummary, dependencies=[Depends(require("run_monitors"))])
 def run_now() -> RunSummary:
+    """Evaluate the monitors now; new alerts are then triaged in the background (see
+    watch/triage.py)."""
     with get_engine().connect() as conn:
-        return run_monitors(conn, "manual")
+        summary = run_monitors(conn, "manual")
+    triage_in_background()
+    return summary
 
 
 @router.post("/alerts/{alert_id}/acknowledge", response_model=Alert)
@@ -178,4 +187,6 @@ def simulate() -> SimulationResult:
         except SimulationError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         run = run_monitors(conn, "simulation")
-        return SimulationResult(month=month, run=run, follow_ups=follow_ups(conn))
+        result = SimulationResult(month=month, run=run, follow_ups=follow_ups(conn))
+    triage_in_background()
+    return result

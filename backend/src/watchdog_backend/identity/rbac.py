@@ -18,6 +18,7 @@ PERMISSIONS: dict[str, set[str]] = {
     "view": _ALL,  # dashboards, process, watch, investigations, actions, model comparison
     "ask": _ALL,  # policy Q&A and search
     "investigate": _WORK,  # start an investigation (spends LLM tokens)
+    "explore": _WORK,  # exploratory read-only SQL, typed or drafted by a model
     "propose_action": _WORK,
     "decide_action": _WORK,  # plus: an approver business role in the pack
     "execute_action": _WORK,
@@ -33,8 +34,8 @@ PERMISSIONS: dict[str, set[str]] = {
 
 DESCRIPTIONS = {
     "viewer": "Read everything, ask policy questions. Cannot start investigations or act.",
-    "analyst": "Investigate, propose, approve (with the right business role) and execute "
-    "actions, run monitors, see observability.",
+    "analyst": "Investigate, explore with read-only SQL, propose, approve (with the right "
+    "business role) and execute actions, run monitors, see observability.",
     "admin": "Everything, plus manage users, documents and showcase runs, simulate a month, act "
     "as another user for demos. Not rate-limited.",
 }

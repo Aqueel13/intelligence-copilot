@@ -9,6 +9,7 @@ from watchdog_backend.api import (
     auth,
     domain,
     evaluation,
+    explore,
     health,
     investigations,
     knowledge,
@@ -53,6 +54,7 @@ def create_app() -> FastAPI:
     app.include_router(watch.router, prefix="/api")
     app.include_router(evaluation.router, prefix="/api")
     app.include_router(observability.router, prefix="/api")
+    app.include_router(explore.router, prefix="/api")
     return app
 
 

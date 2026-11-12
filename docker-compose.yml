@@ -30,11 +30,19 @@ services:
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       LLM_DEFAULT_MODEL: ${LLM_DEFAULT_MODEL:-ollama:qwen2.5:7b}
       LLM_MODELS: ${LLM_MODELS:-{}}
+      LLM_LIGHT_MODEL: ${LLM_LIGHT_MODEL:-}
+      RATE_LIMIT_INVESTIGATIONS_PER_USER_HOUR: ${RATE_LIMIT_INVESTIGATIONS_PER_USER_HOUR:-4}
+      RATE_LIMIT_INVESTIGATIONS_PER_DAY: ${RATE_LIMIT_INVESTIGATIONS_PER_DAY:-12}
+      RATE_LIMIT_QUESTIONS_PER_USER_HOUR: ${RATE_LIMIT_QUESTIONS_PER_USER_HOUR:-20}
+      RATE_LIMIT_QUESTIONS_PER_DAY: ${RATE_LIMIT_QUESTIONS_PER_DAY:-80}
+      WATCH_AUTO_INVESTIGATE: ${WATCH_AUTO_INVESTIGATE:-critical}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       OPERATIONS_MCP_URL: http://operations-mcp:8103/mcp
       OPERATIONS_MCP_BACKEND_TOKEN: ${OPERATIONS_MCP_BACKEND_TOKEN:?run make secrets}
       OPERATIONS_MCP_TOKENS: '{"${OPERATIONS_MCP_BACKEND_TOKEN}": "watchdog-backend", "${OPERATIONS_MCP_EXTERNAL_TOKEN:?run make secrets}": "external-agent"}'
+      ANALYTICS_MCP_TOKENS: '{"${ANALYTICS_MCP_EXTERNAL_TOKEN:?run make secrets}": "external-agent"}'
+      KNOWLEDGE_MCP_TOKENS: '{"${KNOWLEDGE_MCP_EXTERNAL_TOKEN:?run make secrets}": "external-agent"}'
       ENTERPRISE_API_URL: http://enterprise-mock:8201
       ENTERPRISE_API_KEY: ${ENTERPRISE_API_KEY:?run make secrets}
     depends_on:
@@ -83,6 +91,36 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  # Read-only Analytics and Knowledge MCP servers for external clients (localhost only).
+  analytics-mcp:
+    build: ./backend
+    command: ["uvicorn", "watchdog_backend.mcp_servers.analytics:app", "--host", "0.0.0.0", "--port", "8101"]
+    environment: *backend-env
+    volumes:
+      - ./backend/src:/app/src
+      - ./domain_packs:/domain_packs:ro
+    ports:
+      - "127.0.0.1:8101:8101"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  knowledge-mcp:
+    build: ./backend
+    command: ["uvicorn", "watchdog_backend.mcp_servers.knowledge:app", "--host", "0.0.0.0", "--port", "8102"]
+    environment: *backend-env
+    volumes:
+      - ./backend/src:/app/src
+      - ./domain_packs:/domain_packs:ro
+      - ./.cache:/.cache   # embedding model files
+    ports:
+      - "127.0.0.1:8102:8102"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
   # Watch layer: evaluates the domain pack's KPI monitors on a schedule and maintains alerts.
   watcher:
     build: ./backend
@@ -91,6 +129,9 @@ services:
     volumes:
       - ./backend/src:/app/src
       - ./domain_packs:/domain_packs:ro
+      - ./.cache:/.cache   # embedding model files (automatic triage runs investigations)
+    extra_hosts:
+      - "host.docker.internal:${DOCKER_BRIDGE_IP:-172.17.0.1}"   # Ollama, via the relay
     depends_on:
       migrate:
         condition: service_completed_successfully

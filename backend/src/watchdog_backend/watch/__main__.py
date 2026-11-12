@@ -13,6 +13,7 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 from watchdog_backend.db import get_engine
 from watchdog_backend.domain.pack import available_domains, use_domain
 from watchdog_backend.watch.engine import run_monitors
+from watchdog_backend.watch.triage import triage
 
 log = logging.getLogger("watchdog.watch")
 
@@ -32,6 +33,9 @@ def once(trigger: str) -> None:
             r.resolved,
             r.duration_ms,
         )
+        with use_domain(domain), get_engine().connect() as conn:
+            for o in triage(conn, r.evaluations):
+                log.info("%s: triage %s -> %s %s", domain, o.alert_id, o.status, o.note)
 
 
 def main() -> None:

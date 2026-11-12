@@ -1,7 +1,7 @@
 # Intelligence WatchDog — Project Brief
 
 > Working document. Records the decisions made so far and the agreed scope.
-> Last updated: 2026-11-12 (M8: investigation cache, showcase runs, rate limits).
+> Last updated: 2026-11-12 (M8: cache, showcase, limits; Analytics/Knowledge MCP, exploratory SQL, auto-triage).
 
 ## 1. One-liner
 
@@ -72,13 +72,17 @@ An AI operations analyst that **watches** business process KPIs, **investigates*
 | D47 | **A light model tier for simple requests** | Question routing and short single-document policy lookups go to `LLM_LIGHT_MODEL` when set; reasoning, comparison and multi-document questions stay on the standard model. The rule is explainable and its reason is shown and recorded. On one small local GPU a second local model mostly adds swap time; the tier pays off on quota-limited cloud models. |
 | D48 | **Investigations replay from a recording: cache hits and showcase runs** | Each run stores the event stream it produced. An identical request (normalised question, scope, models, and hashes of the case data, documents and pack YAML) replays the latest run in seconds with no model call; "Run it fresh" forces a new one. Admins mark good runs as showcase; anyone, viewers included, can replay them at a watchable pace. Runs from before the recording existed can be read but not replayed. The evaluation calls the graph directly and never uses the cache. |
 | D49 | **Rate limits only on what spends tokens, counted in Postgres** | Per person per hour and for everyone per day (the free tier's daily token cap is shared by every visitor), sized for Groq's 200k tokens/day/model: 4 and 12 investigations, 20 and 80 policy questions by default. Cache hits and replays are free, so limits never block the demo path. Admins are exempt; while an admin acts as someone, the admin's own limits apply. Counts live in `identity.usage_events`, so they survive restarts and hold with several workers. A limited request gets HTTP 429 with Retry-After and a plain-language reason. |
+| D50 | **Analytics and Knowledge MCP servers: read-only, own tokens, no LLM** | Analytics wraps the metrics engine, process mining, alerts, investigations and exploratory SQL, so a client gets the same numbers as the web app. Knowledge returns passages and documents, not answers: the client is a model and can read them, so the server spends no tokens. Each server accepts only its own tokens (a Knowledge token is refused by Analytics). Shared plumbing (token check, pack switching, transport) is in `mcp_servers/common.py`, which Operations now uses too. |
+| D51 | **Exploratory SQL: labelled, and sandboxed in layers** | D5's fallback. One SELECT over three views of the active pack (`cases`, `events`, `feedback`), typed or drafted by a model and always shown before it runs. Layers: validation (one statement; no comments, dollar quoting, backslashes, unbalanced parentheses or session/server functions), then a `watchdog_explorer` role that can only SELECT those views, in a READ ONLY transaction with a 5 s timeout, wrapped as a subquery (Postgres then rejects data-modifying CTEs), capped at 500 rows, on a connection that is closed afterwards. Results are marked "not a verified metric". Analysts and admins only; model drafts count against the question limit. |
+| D52 | **Automatic triage: rank, then investigate the top alert** | After monitors run (watcher schedule, "Run monitors", "Simulate next month"), open untriaged alerts are ranked: critical first, then distance past threshold, then age. The top one per pack per run is investigated as the system user with the alert's own question and scope; an identical earlier run is linked instead (free, and does not use up the run's slot); the shared daily investigation budget applies, and an alert over budget is marked skipped with the reason and reconsidered on later runs (a failed run is not retried automatically, and is never linked to the alert). Alerts are claimed with a conditional UPDATE so the watcher and the app never double-run one. `WATCH_AUTO_INVESTIGATE` = off, critical (default) or all. The first live run found that the watcher container could not reach the models (no model cache or Ollama route), recorded as "failed" on the alerts; fixed in compose. Two flaws found the same way and fixed: failed runs were linked to the alert (hiding the Investigate button), and skipped alerts were never retried. |
 
 ## 4. Product shape
 
 ### Watch (gives the name its meaning)
 - Each domain pack defines **KPI monitors**, e.g. `sla_breach_rate > 15%` or `avg_cycle_time week-over-week +20%`.
 - A scheduled job evaluates the monitors in code (no LLM) and raises **alerts**.
-- An alert can **start an investigation** with one click. Auto-triage comes later.
+- An alert can **start an investigation** with one click, and new critical alerts are
+  **triaged automatically** (D52).
 
 ### Investigate
 - The user asks a question or opens an alert.
@@ -234,11 +238,12 @@ PostgreSQL 17 + pgvector    Operations MCP server (separate process) → mock en
 - Ground-truth evaluation and report
 - 3 screens: **Watch & Overview**, **Investigation**, **Action Centre** (plus a minimal Knowledge upload page)
 
-**Later**
+**Later** (all built in M8 except deployment and GitHub sign-in)
 - Procure-to-Pay pack (proves the engine is horizontal)
-- Analytics and Knowledge MCP servers, so external MCP clients can use them
-- Public deployment, GitHub sign-in, rate limiting
-- Exploratory free-form SQL (read-only, sandboxed)
+- Analytics and Knowledge MCP servers, so external MCP clients can use them (D50)
+- Public deployment, GitHub sign-in, rate limiting (limits: D49)
+- Exploratory free-form SQL (read-only, sandboxed) (D51)
+- Automatic triage of alerts (D52)
 
 **Out (for now)**
 - Multi-tenancy, Kubernetes, Kafka, Databricks/PySpark, Patient Intake pack
@@ -322,7 +327,8 @@ of them. Insurance results unchanged (all 165 earlier tests pass; 26 new P2P tes
 
 Accounts and two-layer RBAC (D43, D44), built-in observability (D45), the policy-answer cache
 (D46), a light model tier (D47), the investigation cache with showcase replay (D48) and rate
-limits (D49). 230 backend tests pass.
+limits (D49), the Analytics and Knowledge MCP servers (D50), exploratory SQL (D51) and
+automatic triage of alerts (D52). 248 backend tests pass.
 
 Remaining M8: public deployment (hosting, HTTPS, GitHub sign-in) and the video. Everything the
 deployment needs from the app itself (showcase runs, limits, secure cookies) is in place.

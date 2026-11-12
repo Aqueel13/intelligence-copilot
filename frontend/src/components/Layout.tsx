@@ -18,6 +18,7 @@ const NAV: { to: string; label: string; permission?: string; adminOnly?: boolean
   { to: '/knowledge', label: 'Knowledge' },
   { to: '/investigate', label: 'Investigate' },
   { to: '/actions', label: 'Actions' },
+  { to: '/explore', label: 'Explore', permission: 'explore' },
   { to: '/models', label: 'Models' },
   { to: '/observability', label: 'Observability', permission: 'view_observability' },
   { to: '/users', label: 'Users', adminOnly: true },

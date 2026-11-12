@@ -17,6 +17,7 @@ _test_db = (
 )
 TEST_DATABASE_URL = _base_url.set(database=_test_db).render_as_string(hide_password=False)
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+os.environ["WATCH_AUTO_INVESTIGATE"] = "off"  # triage tests turn it on with a scripted model
 get_settings.cache_clear()
 
 

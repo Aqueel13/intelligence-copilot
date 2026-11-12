@@ -351,6 +351,9 @@ export interface Alert {
   acknowledged_by: string | null
   resolved_at: string | null
   investigation_id: string | null
+  triage_status: 'running' | 'investigated' | 'reused' | 'skipped' | 'failed' | null
+  triage_note: string | null
+  triaged_at: string | null
 }
 
 export interface FollowUp {

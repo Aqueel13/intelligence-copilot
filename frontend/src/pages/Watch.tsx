@@ -38,13 +38,18 @@ export default function Watch() {
   const L = useLabels()
   const { can } = useAuth()
   const qc = useQueryClient()
-  const status = useQuery({ queryKey: ['watch'], queryFn: watchApi.status, refetchInterval: 30_000 })
+  const status = useQuery({
+    queryKey: ['watch'],
+    queryFn: watchApi.status,
+    // Poll faster while an automatic investigation is running, so its result shows up.
+    refetchInterval: (q) => (q.state.data?.alerts.some((a) => a.triage_status === 'running') ? 5_000 : 30_000),
+  })
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['watch'] })
     qc.invalidateQueries({ queryKey: ['domain'] })
     qc.invalidateQueries({ queryKey: ['metric'] })
   }
-  const run = useMutation({ mutationFn: watchApi.run, onSettled: refresh })
+  const run = useMutation({ mutationFn: watchApi.run, onSettled: () => { refresh(); setTimeout(refresh, 1500) } })
   const simulate = useMutation({ mutationFn: watchApi.simulate, onSettled: () => qc.invalidateQueries() })
   const [confirmSim, setConfirmSim] = useState(false)
 
@@ -246,6 +251,7 @@ function Alerts({ alerts, evaluations }: { alerts: Alert[]; evaluations: Evaluat
                 </span>
               </div>
               <p className="mt-1 text-ink">{a.message}</p>
+              {a.triage_status && <Triage alert={a} />}
               {a.status !== 'resolved' && (
                 <div className="mt-2 flex flex-wrap items-center gap-3">
                   {a.investigation_id ? (
@@ -272,6 +278,24 @@ function Alerts({ alerts, evaluations }: { alerts: Alert[]; evaluations: Evaluat
       </ul>
       {ack.error && <ErrorNote error={ack.error} />}
     </Card>
+  )
+}
+
+const TRIAGE: Record<NonNullable<Alert['triage_status']>, { label: string; status: 'good' | 'warning' | 'serious' | 'critical' }> = {
+  running: { label: 'Investigating automatically…', status: 'warning' },
+  investigated: { label: 'Investigated automatically', status: 'good' },
+  reused: { label: 'Linked to an earlier identical run', status: 'good' },
+  skipped: { label: 'Auto-investigation skipped', status: 'serious' },
+  failed: { label: 'Auto-investigation failed', status: 'critical' },
+}
+
+function Triage({ alert }: { alert: Alert }) {
+  const t = TRIAGE[alert.triage_status!]
+  return (
+    <div className="mt-2 rounded-md bg-ghost px-2 py-1.5">
+      <StatusBadge status={t.status} label={t.label} />
+      {alert.triage_note && <p className="mt-1 text-[11px] text-ink-2">{alert.triage_note}</p>}
+    </div>
   )
 }
 

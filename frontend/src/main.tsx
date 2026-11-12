@@ -15,6 +15,7 @@ const Knowledge = lazy(() => import('./pages/Knowledge'))
 const Investigate = lazy(() => import('./pages/Investigate'))
 const Actions = lazy(() => import('./pages/Actions'))
 const Watch = lazy(() => import('./pages/Watch'))
+const Explore = lazy(() => import('./pages/Explore'))
 const Models = lazy(() => import('./pages/Models'))
 const Observability = lazy(() => import('./pages/Observability'))
 const Users = lazy(() => import('./pages/Users'))
@@ -37,6 +38,7 @@ const router = createBrowserRouter([
       { path: 'knowledge', element: <Suspense><Knowledge /></Suspense> },
       { path: 'investigate', element: <Suspense><Investigate /></Suspense> },
       { path: 'actions', element: <Suspense><Actions /></Suspense> },
+      { path: 'explore', element: <Suspense><Explore /></Suspense> },
       { path: 'models', element: <Suspense><Models /></Suspense> },
       { path: 'observability', element: <Suspense><Observability /></Suspense> },
       { path: 'users', element: <Suspense><Users /></Suspense> },
