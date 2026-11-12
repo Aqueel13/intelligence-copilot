@@ -1,4 +1,4 @@
-.PHONY: prod-secrets prod-up prod-down prod-logs prod-ps prod-seed prod-showcase-import prod-showcase-export prod-backup prod-update secrets users showcase-export showcase-import watch eval eval-report up down logs ps test lint fmt check migrate data knowledge seed psql reset-db
+.PHONY: prod-secrets prod-up prod-start prod-down prod-logs prod-ps prod-seed prod-showcase-import prod-showcase-export prod-backup prod-update secrets users showcase-export showcase-import watch eval eval-report up down logs ps test lint fmt check migrate data knowledge seed psql reset-db
 
 secrets:       ## Add any missing generated secrets to .env (never overwrites existing ones)
 	@for k in OPERATIONS_MCP_BACKEND_TOKEN OPERATIONS_MCP_EXTERNAL_TOKEN ANALYTICS_MCP_EXTERNAL_TOKEN KNOWLEDGE_MCP_EXTERNAL_TOKEN ENTERPRISE_API_KEY ADMIN_PASSWORD DEMO_PASSWORD; do \
@@ -79,6 +79,9 @@ prod-secrets:  ## Production: add a generated POSTGRES_PASSWORD to .env if it ha
 
 prod-up:       ## Production: build and start (or update) the stack
 	$(PROD) up --build -d
+
+prod-start:    ## Production: start with images already present (shipped by deploy/ship-images.sh)
+	$(PROD) up -d --no-build
 
 prod-down:     ## Production: stop the stack (data and certificates are kept)
 	$(PROD) down

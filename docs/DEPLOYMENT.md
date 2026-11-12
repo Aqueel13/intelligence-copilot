@@ -84,6 +84,28 @@ certificate (`make prod-logs` shows it). Sign in as `ADMIN_EMAIL` with `ADMIN_PA
 The data is the same as on a development machine: the generators are deterministic (seed 42),
 and the showcase import checks a fingerprint of the data before loading anything.
 
+### Small servers (1 GB, e.g. Oracle's always-free `VM.Standard.E2.1.Micro`)
+
+Add swap before anything else, and do not build on the server (1/8 of a core, 1 GB: the
+frontend build can take an hour or run out of memory). Build on your own machine, which must
+have the same CPU architecture (`uname -m`), and stream the images over SSH:
+
+```bash
+# on the server, once
+sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile
+sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
+# on your machine, from the repository (again after every update)
+deploy/ship-images.sh ubuntu@<server-ip>
+
+# on the server, instead of make prod-up / prod-update
+make prod-start
+```
+
+Then continue with `make prod-seed` and `make prod-showcase-import` as above. Pages and
+investigations are slower than on a larger server: part of the stack runs from swap.
+
 ## 5. Backups
 
 ```bash
