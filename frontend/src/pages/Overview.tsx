@@ -168,8 +168,11 @@ function Breakdown({ scope, domain }: { scope: Scope; domain: DomainInfo }) {
   const q = useMetric(scope, metric, [dim])
   const unit = q.data?.unit ?? 'ratio'
   const rows = q.data?.rows ?? []
+  // While a new grouping loads, the previous result stays on screen: label its rows by the
+  // dimension they were grouped by, not the one just picked (that key is absent from them).
+  const rowDim = q.data?.group_by[0] ?? dim
   const data = rows.map((r) => ({
-    label: formatDimensionValue(r.group[dim]),
+    label: formatDimensionValue(r.group[rowDim]),
     value: r.value ?? 0,
     display: formatValue(r.value, unit),
     n: r.n,
