@@ -13,7 +13,9 @@ type Mode = 'ask' | 'search'
 export default function Knowledge() {
   const examples = useDomain().data?.knowledge_examples ?? []
   const [question, setQuestion] = useState('')
-  const [mode, setMode] = useState<Mode>('ask')
+  const [chosen, setMode] = useState<Mode>('ask')
+  const canAsk = useAuth().can('ask') // asking spends model tokens: signed-in users only
+  const mode: Mode = canAsk ? chosen : 'search'
   const [history, setHistory] = useState(false)
   const [active, setActive] = useState<number | null>(null)
 
@@ -49,10 +51,14 @@ export default function Knowledge() {
               label="Mode"
               value={mode}
               onChange={setMode}
-              options={[
-                { value: 'ask', label: 'Ask' },
-                { value: 'search', label: 'Search only' },
-              ]}
+              options={
+                canAsk
+                  ? [
+                      { value: 'ask', label: 'Ask' },
+                      { value: 'search', label: 'Search only' },
+                    ]
+                  : [{ value: 'search', label: 'Search only' }]
+              }
             />
           }
         >
@@ -85,6 +91,11 @@ export default function Knowledge() {
               </button>
             ))}
           </div>
+          {!canAsk && (
+            <p className="mt-2 text-xs text-ink-muted">
+              Visitors can search the policies. Sign in to ask questions and get cited answers.
+            </p>
+          )}
           <label className="mt-3 flex items-center gap-2 text-xs text-ink-2">
             <input type="checkbox" checked={history} onChange={(e) => setHistory(e.target.checked)} />
             Include superseded document versions

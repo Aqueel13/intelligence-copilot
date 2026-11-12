@@ -38,7 +38,7 @@ type RunStatus = 'idle' | 'running' | 'done' | 'error'
 export default function Investigate() {
   const { scope, domain } = useDomainScope()
   const [params, setParams] = useSearchParams()
-  const { can } = useAuth()
+  const { can, me } = useAuth()
   const viewer = !can('investigate')
   const curator = can('manage_showcase')
   const [replay, setReplay] = useState<StartInfo | null>(null)
@@ -207,7 +207,13 @@ export default function Investigate() {
             Scope: <span className="text-ink-2">{scopeLabel}</span> (set with the filters above) ·{' '}
             {domain.data?.display_name}
           </p>
-          {viewer && <p className="mt-1 text-xs text-ink-muted">Your role can watch the showcase runs (right) and open past investigations.</p>}
+          {viewer && (
+            <p className="mt-1 text-xs text-ink-muted">
+              {me?.user.platform_role === 'visitor'
+                ? 'You are browsing as a visitor: replay the showcase runs (right) or open past investigations. Sign in to run your own.'
+                : 'Your role can watch the showcase runs (right) and open past investigations.'}
+            </p>
+          )}
           {usage.data && <UsageNote usage={usage.data} />}
         </Card>
 

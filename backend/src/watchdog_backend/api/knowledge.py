@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from watchdog_backend.db import get_session
 from watchdog_backend.domain.pack import get_pack
 from watchdog_backend.identity import limits
-from watchdog_backend.identity.deps import principal, require
+from watchdog_backend.identity.deps import require
 from watchdog_backend.identity.service import Principal
 from watchdog_backend.knowledge import qa
 from watchdog_backend.knowledge.answer import Answer
@@ -83,7 +83,7 @@ class AskRequest(BaseModel):
 
 @router.post("/ask", response_model=Answer)
 def ask(
-    req: AskRequest, session: DbSession, who: Annotated[Principal, Depends(principal)]
+    req: AskRequest, session: DbSession, who: Annotated[Principal, Depends(require("ask"))]
 ) -> Answer:
     try:
         get_chat_model("answer")

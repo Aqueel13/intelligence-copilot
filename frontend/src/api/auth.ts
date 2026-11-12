@@ -5,7 +5,7 @@ export interface UserInfo {
   user_id: string
   email: string
   name: string
-  platform_role: 'viewer' | 'analyst' | 'admin'
+  platform_role: 'visitor' | 'viewer' | 'analyst' | 'admin' // visitor = not signed in (read-only)
   active: boolean
   pack_roles: Record<string, string>
   last_login_at: string | null

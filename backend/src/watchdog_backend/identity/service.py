@@ -42,6 +42,21 @@ class Principal:
         return rbac.allowed(self.user.platform_role, permission)
 
 
+VISITOR = Principal(
+    user=(
+        _visitor := UserOut(
+            user_id=rbac.VISITOR,
+            email="",
+            name="Visitor",
+            platform_role=rbac.VISITOR,
+            active=True,
+            pack_roles={},
+        )
+    ),
+    real=_visitor,
+)
+"""Anyone not signed in, when anonymous visitors are allowed: read-only (rbac.VISITOR)."""
+
 _principal: ContextVar[Principal | None] = ContextVar("principal", default=None)
 
 

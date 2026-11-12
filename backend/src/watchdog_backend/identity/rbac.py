@@ -9,14 +9,16 @@ action unless their (effective) business role is an approver for it.
 from typing import Literal
 
 PlatformRole = Literal["viewer", "analyst", "admin"]
-ROLES: tuple[PlatformRole, ...] = ("viewer", "analyst", "admin")
+ROLES: tuple[PlatformRole, ...] = ("viewer", "analyst", "admin")  # roles an admin can assign
+VISITOR = "visitor"  # not signed in: built in, never stored or assignable (see middleware)
 
-_ALL = {"viewer", "analyst", "admin"}
+_ALL = {VISITOR, "viewer", "analyst", "admin"}
+_SIGNED_IN = {"viewer", "analyst", "admin"}
 _WORK = {"analyst", "admin"}
 
 PERMISSIONS: dict[str, set[str]] = {
     "view": _ALL,  # dashboards, process, watch, investigations, actions, model comparison
-    "ask": _ALL,  # policy Q&A and search
+    "ask": _SIGNED_IN,  # policy Q&A (spends model tokens; search stays open to everyone)
     "investigate": _WORK,  # start an investigation (spends LLM tokens)
     "explore": _WORK,  # exploratory read-only SQL, typed or drafted by a model
     "propose_action": _WORK,
@@ -33,6 +35,7 @@ PERMISSIONS: dict[str, set[str]] = {
 }
 
 DESCRIPTIONS = {
+    VISITOR: "Not signed in: read everything and replay showcase runs. Sign in to run anything.",
     "viewer": "Read everything, ask policy questions. Cannot start investigations or act.",
     "analyst": "Investigate, explore with read-only SQL, propose, approve (with the right "
     "business role) and execute actions, run monitors, see observability.",

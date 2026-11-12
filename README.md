@@ -36,6 +36,9 @@ rule ruled out (MSME suppliers: the effect is explained by AP team).*
 
 Around the loop, the platform an enterprise would ask for:
 
+- **Open to read, sign in to run.** Anyone can browse every screen and replay showcase
+  investigations without an account; running anything (an investigation, a question, SQL, an
+  action) needs a sign-in, and only an admin creates accounts.
 - **Accounts and role-based access.** Local accounts (scrypt-hashed passwords, HttpOnly
   session cookies). Platform roles (viewer, analyst, admin) gate what someone can do; a
   business role per process (e.g. Head of Claims, Treasury Head) gates what they can approve.

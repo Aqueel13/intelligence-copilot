@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { api } from '../api/client'
 import { watchApi } from '../api/investigation'
 import { formatCount, formatDimensionValue, formatMonth } from '../lib/format'
 import { authApi } from '../api/auth'
-import { useAuth } from '../lib/auth'
+import { Login, useAuth } from '../lib/auth'
 import { useActiveDomain } from '../lib/domain'
 import { listDomains } from '../lib/domainStore'
 import { useDomainScope } from '../lib/hooks'
@@ -120,9 +121,22 @@ function DomainSwitcher() {
 /** Who is signed in, their roles here, sign out; admins can act as another user (audited). */
 function UserMenu() {
   const { me } = useAuth()
+  const [signIn, setSignIn] = useState(false)
   const realAdmin = (me?.real_user ?? me?.user)?.platform_role === 'admin'
   const users = useQuery({ queryKey: ['auth-users'], queryFn: authApi.users, enabled: realAdmin, staleTime: 60_000 })
   if (!me) return null
+  if (me.user.platform_role === 'visitor')
+    return (
+      <div className="flex items-center gap-3 text-xs text-ink-2">
+        <span className="rounded border border-hairline px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink-muted" title="Not signed in: you can read every screen and replay showcase runs.">
+          Visitor · read-only
+        </span>
+        <button onClick={() => setSignIn(true)} className="rounded-md bg-series-1 px-2.5 py-1 font-semibold text-white">
+          Sign in to run things
+        </button>
+        {signIn && <Login onCancel={() => setSignIn(false)} />}
+      </div>
+    )
   const switchTo = async (id: string) => {
     await authApi.actAs(id === (me.real_user ?? me.user).user_id ? null : id)
     window.location.reload() // every screen re-renders as the new identity

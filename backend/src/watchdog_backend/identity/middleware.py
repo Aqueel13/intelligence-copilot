@@ -1,13 +1,15 @@
-"""Authentication for /api: a session cookie resolves to the current principal. Everything
-except health and sign-in requires one. Plain ASGI so the principal (and the user id on every
-observability record) stays set through streamed responses."""
+"""Authentication for /api: a session cookie resolves to the current principal. Without one,
+the request runs as the read-only visitor (ANONYMOUS_VISITORS, the default) or is refused.
+Plain ASGI so the principal (and the user id on every observability record) stays set
+through streamed responses."""
 
 import json
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from watchdog_backend.config import get_settings
 from watchdog_backend.db import get_engine
-from watchdog_backend.identity.service import reset_principal, resolve, set_principal
+from watchdog_backend.identity.service import VISITOR, reset_principal, resolve, set_principal
 from watchdog_backend.observability.context import traced
 
 COOKIE = "wd_session"
@@ -38,6 +40,8 @@ class AuthMiddleware:
         if token:
             with get_engine().connect() as conn:
                 principal = resolve(conn, token)
+        if principal is None and get_settings().anonymous_visitors:
+            principal = VISITOR  # read-only: every write and token-spending route needs more
         if principal is None:
             body = json.dumps({"detail": "Sign in required"}).encode()
             await send(

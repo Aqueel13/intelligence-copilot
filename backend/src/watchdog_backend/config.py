@@ -95,6 +95,10 @@ class Settings(BaseSettings):
     watch_auto_investigate: Literal["off", "critical", "all"] = "critical"
     watch_auto_investigate_max_per_run: int = 1
 
+    # Visitors who are not signed in can read every screen (and replay showcase runs), but
+    # not run anything. False = everything needs a sign-in.
+    anonymous_visitors: bool = True
+
     # Comma-separated list of allowed browser origins.
     cors_origins: str = "http://localhost:5173"
 

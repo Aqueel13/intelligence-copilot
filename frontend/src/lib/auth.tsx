@@ -31,7 +31,9 @@ export function MeProvider({ children }: { children: ReactNode }) {
 // eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(Ctx)
 
-function Login() {
+/** Sign-in form: the whole page when visitors are not allowed; an overlay with Cancel when a
+ * visitor chooses to sign in. Only accounts an admin created can sign in (no sign-up). */
+export function Login({ onCancel }: { onCancel?: () => void } = {}) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -52,7 +54,16 @@ function Login() {
     }
   }
   return (
-    <div className="flex min-h-screen items-center justify-center bg-page px-4">
+    <div
+      className={
+        onCancel
+          ? 'fixed inset-0 z-50 flex items-center justify-center bg-page/90 px-4'
+          : 'flex min-h-screen items-center justify-center bg-page px-4'
+      }
+      role={onCancel ? 'dialog' : undefined}
+      aria-modal={onCancel ? true : undefined}
+      aria-label={onCancel ? 'Sign in' : undefined}
+    >
       <form onSubmit={submit} className="w-full max-w-sm rounded-xl border border-hairline bg-surface p-6">
         <div className="text-lg font-semibold text-ink">Intelligence WatchDog</div>
         <div className="mb-5 text-xs text-ink-muted">Watch · Investigate · Recommend · Act</div>
@@ -82,6 +93,11 @@ function Login() {
         <button disabled={busy} className="w-full rounded-lg bg-series-1 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
+        {onCancel && (
+          <button type="button" onClick={onCancel} className="mt-2 w-full rounded-lg px-4 py-2 text-sm text-ink-2 hover:bg-ghost">
+            Keep browsing as a visitor
+          </button>
+        )}
         <p className="mt-4 text-[11px] text-ink-muted">
           Local accounts (`make users`). Demo accounts are named after each pack's governance users, e.g. aqueel.kanchwala@demo.watchdog.
         </p>

@@ -25,10 +25,52 @@ def test_password_hashing() -> None:
     assert not verify_password("anything", None)
 
 
-def test_every_api_route_needs_sign_in_except_health(app_client) -> None:
+@pytest.fixture
+def no_visitors(monkeypatch):
+    from watchdog_backend.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "anonymous_visitors", False)
+
+
+def test_without_visitors_every_route_needs_sign_in_except_health(app_client, no_visitors):
     assert app_client.get("/api/health").status_code == 200
     for path in ("/api/domain", "/api/domains", "/api/watch", "/api/actions", "/api/auth/me"):
         assert app_client.get(path).status_code == 401, path
+
+
+def test_visitors_read_everything_but_run_nothing(app_client, kb) -> None:
+    me = app_client.get("/api/auth/me").json()
+    assert me["user"]["platform_role"] == "visitor" and me["permissions"] == ["view"]
+    for path in ("/api/domain", "/api/domains", "/api/watch", "/api/actions", "/api/audit"):
+        assert app_client.get(path).status_code == 200, path
+    assert app_client.post("/api/knowledge/search", json={"query": "QA target"}).status_code == 200
+    refused = [
+        ("post", "/api/investigations/stream", {"question": "Why are claims late?"}),
+        ("post", "/api/knowledge/ask", {"question": "What is the QA target?"}),
+        ("post", "/api/explore/run", {"sql": "select 1"}),
+        ("post", "/api/actions", {"action_id": "retrain_team_b"}),
+        ("post", "/api/watch/run", None),
+        (
+            "post",
+            "/api/auth/users",
+            {
+                "user_id": "x",
+                "email": "x@y.z",
+                "name": "X",
+                "platform_role": "admin",
+                "password": "long-enough-pw",
+                "pack_roles": {},
+            },
+        ),
+        ("post", "/api/auth/act-as", {"user_id": "admin"}),
+    ]
+    for method, path, body in refused:
+        r = getattr(app_client, method)(path, json=body)
+        assert r.status_code in (401, 403), (path, r.status_code)
+    r = app_client.post("/api/investigations/stream", json={"question": "Why are claims late?"})
+    assert r.status_code == 401 and "Sign in" in r.json()["detail"]
+    for path in ("/api/observability/summary", "/api/auth/users"):
+        assert app_client.get(path).status_code in (401, 403), path
 
 
 def test_login_sets_an_httponly_cookie_and_logout_ends_the_session(app_client) -> None:
@@ -41,7 +83,7 @@ def test_login_sets_an_httponly_cookie_and_logout_ends_the_session(app_client) -
     assert me["user"]["user_id"] == "a.rao" and me["business_role"] == "Head of Claims"
     assert "investigate" in me["permissions"] and "manage_users" not in me["permissions"]
     app_client.post("/api/auth/logout")
-    assert app_client.get("/api/auth/me").status_code == 401
+    assert app_client.get("/api/auth/me").json()["user"]["platform_role"] == "visitor"
 
 
 def test_wrong_password_gets_the_same_answer_as_unknown_email(app_client) -> None:
@@ -81,8 +123,13 @@ def test_role_matrix(client_as, user, method, path, allowed) -> None:
 
 
 def test_rbac_matrix_is_monotonic() -> None:
-    """Every permission a viewer has, an analyst has; every one an analyst has, an admin has."""
+    """Every permission a visitor has, a viewer has; a viewer's, an analyst; an analyst's, an
+    admin. A visitor can only view."""
+    assert rbac.permissions_for(rbac.VISITOR) == ["view"]
+    assert rbac.VISITOR not in rbac.ROLES  # never assignable
     for perm in rbac.PERMISSIONS:
+        if rbac.allowed(rbac.VISITOR, perm):
+            assert rbac.allowed("viewer", perm)
         if rbac.allowed("viewer", perm):
             assert rbac.allowed("analyst", perm)
         if rbac.allowed("analyst", perm):
@@ -120,7 +167,8 @@ def test_admin_manages_users_and_deactivation_ends_sessions(client_as) -> None:
     t = client_as("t.test")
     assert t.get("/api/auth/me").json()["user"]["platform_role"] == "analyst"
     assert admin.patch("/api/auth/users/t.test", json={"active": False}).status_code == 200
-    assert t.get("/api/auth/me").status_code == 401  # sessions ended
+    # sessions ended: the cookie no longer signs anyone in
+    assert t.get("/api/auth/me").json()["user"]["platform_role"] == "visitor"
     admin.patch("/api/auth/users/t.test", json={"active": True})
 
 
@@ -206,6 +254,11 @@ def test_there_is_no_self_registration(client_as) -> None:
     from watchdog_backend.main import app
 
     anonymous = TestClient(app)
-    assert anonymous.post("/api/auth/users", json=NEW_USER).status_code == 401
+    assert anonymous.post("/api/auth/users", json=NEW_USER).status_code == 401  # "Sign in"
     routes = {getattr(r, "path", "") for r in app.routes}
     assert not any(w in p for p in routes for w in ("register", "signup", "sign-up"))
+
+
+def test_visitor_is_not_offered_as_an_assignable_role(client_as) -> None:
+    roles = client_as("admin").get("/api/auth/roles").json()["platform_roles"]
+    assert set(roles) == {"viewer", "analyst", "admin"}

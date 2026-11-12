@@ -123,7 +123,8 @@ def roles() -> RoleInfo:
         names |= {u.role for u in get_governance(d).users}
         business[d] = sorted(names)
     return RoleInfo(
-        platform_roles=rbac.DESCRIPTIONS,
+        # assignable roles only: "visitor" is built in for anyone not signed in
+        platform_roles={r: rbac.DESCRIPTIONS[r] for r in rbac.ROLES},
         permissions={k: sorted(v) for k, v in rbac.PERMISSIONS.items()},
         business_roles=business,
     )

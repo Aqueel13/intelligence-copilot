@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 from fastapi import HTTPException
 
+from watchdog_backend.identity import rbac
 from watchdog_backend.identity.service import Principal, current_principal
 
 
@@ -17,6 +18,12 @@ def principal() -> Principal:
 def require(permission: str) -> Callable[[], Principal]:
     def check() -> Principal:
         p = principal()
+        if not p.can(permission) and p.user.platform_role == rbac.VISITOR:
+            raise HTTPException(
+                status_code=401,
+                detail=f"Sign in to {permission.replace('_', ' ')}: visitors can read and "
+                "replay showcase runs only",
+            )
         if not p.can(permission):
             raise HTTPException(
                 status_code=403,
