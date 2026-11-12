@@ -157,6 +157,38 @@ async def test_analytics_mcp_is_read_only_and_matches_the_metrics_engine(
 
 
 @pytest.mark.anyio
+async def test_mcp_tool_calls_are_recorded_without_arguments(db_engine, mcp_tokens) -> None:
+    from watchdog_backend.observability import queries
+    from watchdog_backend.observability.recorder import flush
+
+    secret_sql = "select 'recorder-canary' from cases"
+    await _mcp("analytics", 8101, ANALYTICS_TOKEN, "list_packs", {})
+    await _mcp(
+        "analytics",
+        8101,
+        ANALYTICS_TOKEN,
+        "run_exploratory_sql",
+        {"sql": f"drop table cases -- {secret_sql}", "domain": "procure_to_pay"},
+    )
+    await _mcp("analytics", 8101, ANALYTICS_TOKEN, "query_metric", {"metric": 42})
+    flush()
+    with db_engine.connect() as c:
+        rows = c.execute(
+            text("""SELECT tool, client, domain, status, error FROM observability.mcp_calls
+                    WHERE server = 'analytics' ORDER BY call_id DESC LIMIT 3""")
+        ).all()
+        m = queries.summary(c, hours=1)["mcp"]
+    invalid, refused, packs = rows
+    assert packs == ("list_packs", "test-agent", None, "ok", None)  # takes no pack
+    assert refused[:4] == ("run_exploratory_sql", "test-agent", "procure_to_pay", "error")
+    assert "Only SELECT" in refused.error or "comments" in refused.error
+    assert invalid.status == "error" and invalid.error.startswith("invalid arguments: metric")
+    assert all("recorder-canary" not in (r.error or "") for r in rows)  # no client data
+    assert any(t["tool"] == "run_exploratory_sql" and t["errors"] >= 1 for t in m["tools"])
+    assert any(cl["key"] == "test-agent" for cl in m["clients"])
+
+
+@pytest.mark.anyio
 async def test_each_mcp_server_accepts_only_its_own_tokens(db_engine, mcp_tokens) -> None:
     import httpx2
 

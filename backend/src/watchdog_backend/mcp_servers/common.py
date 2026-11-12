@@ -2,6 +2,7 @@
 connection with the requested pack active, and the transport settings."""
 
 import secrets
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -13,9 +14,11 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
+from pydantic import ValidationError
 
 from watchdog_backend.db import get_engine
 from watchdog_backend.domain.pack import UnknownDomainError, current_domain, use_domain
+from watchdog_backend.observability.recorder import record
 
 READ = ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False)
 
@@ -64,10 +67,59 @@ async def call(
         raise ToolError(str(exc)) from exc
 
 
+def _error_text(exc: ToolError) -> str:
+    """What to store for a failed call: the server's own message, never the caller's data."""
+    if isinstance(exc.__cause__, ValidationError):  # field names only: values are caller data
+        fields = sorted({".".join(map(str, e["loc"])) for e in exc.__cause__.errors()})
+        return f"invalid arguments: {', '.join(fields)}"
+    if type(exc) is not ToolError:  # UnexpectedToolError: a crash, details stay in the logs
+        return type(exc.__cause__ or exc).__name__
+    return str(exc)
+
+
+class RecordedMCPServer(MCPServer):
+    """Records every tool call in observability.mcp_calls: server, tool, client, pack,
+    outcome and latency. Arguments are not stored (they can hold a client's SQL or search
+    text); an error is stored as its message only when it is a ToolError, which the server
+    wrote for the client anyway, otherwise as its class name."""
+
+    def __init__(self, *args: Any, server_key: str, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.server_key = server_key
+
+    async def call_tool(self, name: str, arguments: dict[str, Any], context: Any = None) -> Any:
+        started = time.perf_counter()
+        status, error = "ok", None
+        try:
+            return await super().call_tool(name, arguments, context)
+        except ToolError as exc:
+            status, error = "error", _error_text(exc)
+            raise
+        except Exception as exc:
+            status, error = "error", type(exc).__name__
+            raise
+        finally:
+            schema = self._tool_input_schema(name) or {}
+            takes_pack = "domain" in schema.get("properties", {})
+            record(
+                "mcp_calls",
+                {
+                    "server": self.server_key,
+                    "tool": name,
+                    "client": client_name(),
+                    "domain": (arguments.get("domain") or current_domain()) if takes_pack else None,
+                    "status": status,
+                    "duration_ms": int((time.perf_counter() - started) * 1000),
+                    "error": error[:300] if error else None,
+                },
+            )
+
+
 def make_server(
     name: str, title: str, instructions: str, port: int, scope: str, tokens: Callable[[], dict]
 ) -> MCPServer:
-    return MCPServer(
+    return RecordedMCPServer(
+        server_key=scope,
         name=name,
         title=title,
         instructions=instructions,

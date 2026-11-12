@@ -29,6 +29,7 @@ _TABLES = {
         "tokens_saved",
     ),
     "api_requests": ("method", "route", "status", "duration_ms", "domain", "user_id"),
+    "mcp_calls": ("server", "tool", "client", "domain", "status", "duration_ms", "error"),
 }
 # Values for NOT NULL columns a caller may leave out (a cache hit has no token counts).
 _DEFAULTS = {"input_tokens": 0, "output_tokens": 0, "tokens_saved": 0, "duration_ms": 0}

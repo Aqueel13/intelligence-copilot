@@ -30,6 +30,19 @@ interface Summary {
   api: { key: string; requests: number; server_errors: number; client_errors: number; p50_ms: number; p95_ms: number }[]
   errors: { at: string; domain: string; role: string; model: string; purpose: string | null; investigation_id: string | null; error: string }[]
   quota: { model: string; tokens: number; limit: number; share: number | null }[]
+  mcp: {
+    tools: (McpAgg & { server: string; tool: string })[]
+    clients: (McpAgg & { key: string })[]
+    errors: { at: string; server: string; tool: string; client: string; domain: string | null; error: string | null }[]
+  }
+}
+
+interface McpAgg {
+  calls: number
+  errors: number
+  p50_ms: number | null
+  p95_ms: number | null
+  last_at: string
 }
 
 interface InvestigationRow {
@@ -137,6 +150,8 @@ export default function Observability() {
           />
         </Card>
 
+        <Mcp m={s.mcp} />
+
         <Card title="Recent LLM errors" subtitle="Provider failures, timeouts and malformed output that could not be repaired">
           {s.errors.length ? (
             <ul className="space-y-2 text-xs">
@@ -156,6 +171,45 @@ export default function Observability() {
         </Card>
       </div>
     </Refetching>
+  )
+}
+
+function Mcp({ m }: { m: Summary['mcp'] }) {
+  const when = (at: string) => new Date(at).toLocaleString()
+  return (
+    <Card
+      title="MCP tool calls"
+      subtitle="Calls from external MCP clients to the Analytics, Knowledge and Operations servers, by the client name their token maps to. Arguments are not recorded."
+    >
+      {m.tools.length ? (
+        <div className="grid gap-4">
+          <Table
+            head={['Server · tool', 'Calls', 'Errors', 'Median', '95th pct', 'Last call']}
+            rows={m.tools.map((t) => [`${t.server} · ${t.tool}`, formatCount(t.calls), t.errors, ms(t.p50_ms), ms(t.p95_ms), when(t.last_at)])}
+          />
+          <Table
+            head={['Client', 'Calls', 'Errors', 'Median', '95th pct', 'Last call']}
+            rows={m.clients.map((c) => [c.key, formatCount(c.calls), c.errors, ms(c.p50_ms), ms(c.p95_ms), when(c.last_at)])}
+          />
+          {m.errors.length > 0 && (
+            <ul className="space-y-2 text-xs">
+              {m.errors.map((e, i) => (
+                <li key={i} className="rounded-md border border-hairline p-2">
+                  <StatusBadge status="critical" label={`${e.server} · ${e.tool}`} />
+                  <span className="ml-2 text-ink-muted">
+                    {when(e.at)} · {e.client}
+                    {e.domain ? ` · ${e.domain}` : ''}
+                  </span>
+                  <div className="mt-1 break-words text-ink-2">{e.error}</div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : (
+        <p className="text-xs text-ink-muted">No MCP calls in this period.</p>
+      )}
+    </Card>
   )
 }
 

@@ -86,7 +86,36 @@ def summary(conn: Connection, hours: int = 24, pack: str | None = None) -> dict[
         "series": series,
         "api": api,
         "errors": errors,
+        "mcp": mcp(conn, where, p),
         "quota": quota(conn),
+    }
+
+
+def mcp(conn: Connection, where: str, params: dict[str, Any]) -> dict[str, Any]:
+    """MCP tool calls: per server and tool, per client, and the latest failures."""
+    agg = """count(*) AS calls, count(*) FILTER (WHERE status = 'error') AS errors,
+             percentile_cont(0.5) WITHIN GROUP (ORDER BY duration_ms) AS p50_ms,
+             percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) AS p95_ms,
+             max(at) AS last_at"""
+    return {
+        "tools": _rows(
+            conn,
+            f"""SELECT server, tool, {agg} FROM observability.mcp_calls WHERE {where}
+                GROUP BY server, tool ORDER BY count(*) DESC""",
+            params,
+        ),
+        "clients": _rows(
+            conn,
+            f"""SELECT client AS key, {agg} FROM observability.mcp_calls WHERE {where}
+                GROUP BY client ORDER BY count(*) DESC""",
+            params,
+        ),
+        "errors": _rows(
+            conn,
+            f"""SELECT at, server, tool, client, domain, error FROM observability.mcp_calls
+                WHERE {where} AND status = 'error' ORDER BY at DESC LIMIT 20""",
+            params,
+        ),
     }
 
 
