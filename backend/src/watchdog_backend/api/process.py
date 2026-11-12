@@ -2,8 +2,11 @@ from collections.abc import Callable
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
+from sqlalchemy import Connection
 from sqlalchemy.orm import Session
 
+from watchdog_backend.analytics import process_cache
 from watchdog_backend.analytics.metrics import MetricQueryError, MetricsEngine
 from watchdog_backend.analytics.process import (
     ActivityAnalysis,
@@ -26,16 +29,24 @@ Analyzer = Annotated[ProcessAnalyzer, Depends(get_analyzer)]
 DbSession = Annotated[Session, Depends(get_session)]
 
 
-def _guard[T](fn: Callable[[], T]) -> T:
+def _cached[T: BaseModel](
+    analyzer: ProcessAnalyzer,
+    session: Session,
+    kind: str,
+    q: ProcessQuery,
+    fn: Callable[[Connection], T],
+) -> T:
+    """Serve from the process cache; invalid filters still answer 422 (never cached)."""
     try:
-        return fn()
+        conn = session.connection()
+        return process_cache.cached(conn, analyzer.metrics.pack.domain, kind, q, lambda: fn(conn))
     except MetricQueryError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/map", response_model=ProcessMap)
 def process_map(q: ProcessQuery, analyzer: Analyzer, session: DbSession) -> ProcessMap:
-    return _guard(lambda: analyzer.process_map(session.connection(), q))
+    return _cached(analyzer, session, "map", q, lambda c: analyzer.process_map(c, q))
 
 
 @router.post("/variants", response_model=VariantSummary)
@@ -45,9 +56,9 @@ def variants(
     session: DbSession,
     top: Annotated[int, Query(ge=1, le=50)] = 10,
 ) -> VariantSummary:
-    return _guard(lambda: analyzer.variants(session.connection(), q, top))
+    return _cached(analyzer, session, f"variants:{top}", q, lambda c: analyzer.variants(c, q, top))
 
 
 @router.post("/activities", response_model=ActivityAnalysis)
 def activities(q: ProcessQuery, analyzer: Analyzer, session: DbSession) -> ActivityAnalysis:
-    return _guard(lambda: analyzer.activities(session.connection(), q))
+    return _cached(analyzer, session, "activities", q, lambda c: analyzer.activities(c, q))

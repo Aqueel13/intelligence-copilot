@@ -18,6 +18,7 @@ _test_db = (
 TEST_DATABASE_URL = _base_url.set(database=_test_db).render_as_string(hide_password=False)
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["WATCH_AUTO_INVESTIGATE"] = "off"  # triage tests turn it on with a scripted model
+os.environ["PROCESS_CACHE_WARM"] = "false"
 get_settings.cache_clear()
 
 
@@ -150,3 +151,11 @@ def p2p_db(db_engine, p2p_dataset):
     with use_domain("procure_to_pay"), db_engine.begin() as conn:
         ingest_directory(conn, "procure_to_pay", documents_dir(), get_embedder())
     return db_engine
+
+
+@pytest.fixture(autouse=True)
+def _fresh_process_cache():
+    """Tests reload data within seconds; the cache's 30 s fingerprint memo must not leak."""
+    from watchdog_backend.analytics import process_cache
+
+    process_cache.clear()

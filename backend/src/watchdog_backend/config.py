@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     # cloud providers (e.g. groq:llama-3.1-8b-instant).
     llm_light_model: str | None = None
     knowledge_cache: bool = True  # reuse answers to repeated / near-identical questions
+    process_cache_warm: bool = True  # compute each pack's default process view at startup
     llm_timeout_seconds: float = 90.0  # per read (resets with every streamed token)
     llm_call_deadline_seconds: float = 180.0  # wall clock for a whole call
     llm_max_retries: int = 2  # provider-level retries (rate limits honour Retry-After)
