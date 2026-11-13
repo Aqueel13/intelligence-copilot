@@ -1,0 +1,13 @@
+[Unit]
+Description=Repeat the Groq evaluation campaign every 28 hours (free-tier daily quota)
+
+[Timer]
+# First pass a minute after the timer starts, then 28 hours after each pass began: Groq's
+# 200,000-tokens-per-day quota is a rolling 24 hours, plus margin. A pass that is still
+# running is never started twice.
+OnActiveSec=1min
+OnUnitActiveSec=28h
+Unit=groq-eval.service
+
+[Install]
+WantedBy=timers.target

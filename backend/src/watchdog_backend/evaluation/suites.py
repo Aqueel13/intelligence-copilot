@@ -9,6 +9,7 @@
 import re
 import time
 import traceback
+from collections.abc import Callable
 from typing import Any
 
 from watchdog_backend.analytics.metrics import MetricsEngine
@@ -142,13 +143,33 @@ def investigation_run(model_id: str, seed: int, q: dict[str, Any], spec: dict[st
 # ----------------------------------------------------------------------------------- qa
 
 
-def qa_suite(model_id: str, spec: dict[str, Any], pause_s: float = 0.0) -> list[dict]:
+def _qa_items(spec: dict[str, Any]) -> list[tuple[str, Any]]:
+    items: list[tuple[str, Any]] = [(q.q, q) for q in load_benchmark(benchmark_path())]
+    return items + [(text, None) for text in spec.get("unanswerable", [])]
+
+
+def qa_questions(spec: dict[str, Any]) -> list[str]:
+    return [text for text, _ in _qa_items(spec)]
+
+
+def qa_suite(
+    model_id: str,
+    spec: dict[str, Any],
+    pause_s: float = 0.0,
+    only: set[str] | None = None,
+    stop: Callable[[], bool] | None = None,
+    emit: Callable[[dict], None] | None = None,
+) -> list[dict]:
+    """`only` limits the questions; `emit` receives each record as it exists; `stop` is checked
+    before each question (a resumed run stops once the model's daily quota is spent)."""
     counter = UsageCounter()
     model = _model(ModelSpec.parse(model_id), counter)
-    questions = [(q.q, q) for q in load_benchmark(benchmark_path())]
-    questions += [(text, None) for text in spec.get("unanswerable", [])]
     out = []
-    for text, bench in questions:
+    for text, bench in _qa_items(spec):
+        if only is not None and text not in only:
+            continue
+        if stop and stop():
+            break
         counter.reset()
         rec: dict[str, Any] = {
             "suite": "qa",
@@ -174,6 +195,8 @@ def qa_suite(model_id: str, spec: dict[str, Any], pause_s: float = 0.0) -> list[
         except Exception as exc:
             rec |= {"ok": False, "error": _redact(f"{type(exc).__name__}: {str(exc)[:300]}")}
         out.append(rec)
+        if emit:
+            emit(rec)
         if pause_s:
             time.sleep(pause_s)
     return out

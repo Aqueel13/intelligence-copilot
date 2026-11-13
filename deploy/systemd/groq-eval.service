@@ -1,0 +1,9 @@
+[Unit]
+Description=Groq evaluation campaign: one resumable pass (evaluation/groq_campaign.sh)
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/projects/intelligence-copilot
+ExecStart=%h/projects/intelligence-copilot/evaluation/groq_campaign.sh
+TimeoutStartSec=infinity
