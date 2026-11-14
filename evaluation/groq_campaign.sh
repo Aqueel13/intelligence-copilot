@@ -47,7 +47,9 @@ run_model() {
       >>"$LOGS/$CAMPAIGN-$pack-$name.log" 2>&1
     local rc=$?
     log "$model · $pack: pass ended (exit $rc)"
-    # Exit 3: quota spent, work left. The next pack would hit the same spent quota.
+    # Exit 3: work left, quota not spent: go on to the next pack. Exit 4: the daily quota is
+    # spent, so the next pack would fail too. Anything else is an error: stop this model.
+    if [[ $rc -eq 3 ]]; then status=1; continue; fi
     if [[ $rc -ne 0 ]]; then status=1; break; fi
   done
   return $status

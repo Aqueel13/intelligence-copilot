@@ -164,13 +164,14 @@ def _run(args: argparse.Namespace, db: str, domain: str, load_seed) -> None:
             remaining += sum(len(qa_todo(m)) for m in models)
     if remaining:
         log(f"{remaining} item(s) left for the next pass → {out}")
-        sys.exit(EXIT_INCOMPLETE)
+        sys.exit(EXIT_QUOTA_SPENT if quota_spent else EXIT_INCOMPLETE)
     meta["finished"] = datetime.now().isoformat(timespec="seconds")
     meta_path.write_text(json.dumps(meta, indent=2))
     log(f"done → {out}")
 
 
-EXIT_INCOMPLETE = 3  # --resume: work remains (quota spent); run again later
+EXIT_INCOMPLETE = 3  # --resume: work remains; run again later
+EXIT_QUOTA_SPENT = 4  # --resume: work remains and a model's daily quota is spent
 
 
 def _load_previous(path: Path) -> list[dict]:
@@ -218,7 +219,8 @@ def main() -> None:
         "--resume",
         action="store_true",
         help="continue the run in --out: skip results that succeeded, stop a model when its\n"
-        f"daily quota is spent, exit {EXIT_INCOMPLETE} while work remains",
+        f"daily quota is spent, exit {EXIT_INCOMPLETE} while work remains\n"
+        f"({EXIT_QUOTA_SPENT} if a daily quota was spent)",
     )
     r.add_argument(
         "--max-attempts",
