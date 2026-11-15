@@ -76,16 +76,17 @@ counterfactual per case). Full detail in the [evaluation report](docs/evaluation
 
 | | Insurance claims | Procure-to-pay |
 |---|---|---|
-| Investigations, 18-month data (local 7B × 3 seeds × all questions) | 15 | 12 |
+| Investigations, 18-month data (× 3 seeds × all questions) | 60: local 7B and 3 Groq models, 15 each | 12: local 7B (Groq runs in progress) |
 | Mean recall of planted causes | 100% | 100% |
 | Decoys accepted as causes | **0** in every run | **0** in every run |
-| Earlier six-month data | 3 cloud models + local, 36 runs (6 refused by free-tier limits): 100% recall in every completed run, 0 decoys | local 7B, 9 runs: 100% recall, 0 decoys |
 | Policy Q&A: answers citing a relevant passage | 95–100% by model | 100% |
 | What-if vs exact counterfactual (18-month data) | 0.55–0.97 of truth (understates) | 0.64–1.17 of truth |
-| Runs recommending an action that is not cost-effective (18-month data) | 0 of 15 | 0 of 12 |
+| Runs recommending an action that is not cost-effective (18-month data) | local 7 of 15, Groq 14–15 of 15 (mostly the Saturday rota) | 0 of 12 |
 
 The 18-month data has five planted causes and three or four decoys per pack (`docs/PROJECT_BRIEF.md`
-§5, §5b); the cloud models have not been re-run on it yet (free-tier quotas).
+§5, §5b). The Groq models ran on it as a resumable campaign paced by the free tier's daily
+quota; procure-to-pay is still running. The Saturday rota's what-if understates its benefit
+(0.55 of truth), so it shows as not paying back, yet most insurance runs still recommend it.
 
 Every miss was over-caution (a real cause left inconclusive), never a decoy accepted; the
 evaluation also found nine product defects, each fixed and re-measured

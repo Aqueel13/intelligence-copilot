@@ -112,37 +112,47 @@ Groq/Gemini free tiers are configuration. The evaluation compares them on the sa
 All numbers come from [`evaluation_report.md`](evaluation_report.md), which also lists every
 failure.
 
-**Insurance claims** (36 scored investigations: 4 models × 3 data seeds × 3 questions, plus
-12 earlier runs repeated after fixes; Q&A, retrieval and what-if suites)
+Every result below is on the 18-month datasets (18,000 cases per pack, five planted causes and
+several decoys each), with three data seeds per question.
 
-| Model | Runs completed | Mean recall of planted causes | Decoys accepted | Model's own citation accuracy |
-|---|---|---|---|---|
-| `qwen2.5:7b`, local, free | 9/9 | 100% | 0 | 75% |
-| `qwen3.8-27b`, Groq free tier | 9/9 | 97% | 0 | 97% |
-| `gpt-oss-20b`, Groq free tier | 7/9 | 100% | 0 | 69% |
-| `gpt-oss-120b`, Groq free tier | 6/9 | 79% | 0 | 73% |
+**Insurance claims** (60 scored investigations: 4 models × 3 seeds × 5 questions; Q&A,
+retrieval and what-if suites)
 
-No model accepted a decoy in any run. The failed runs were refused by Groq's free daily quota,
-and are reported as such. Citation accuracy is measured *before* the verifier corrects
-anything. With the verifier, 96% of answers cite a relevant passage for every model, and all
-models declined 5/5 unanswerable questions.
+| Model | Runs completed | Mean recall of planted causes | Decoys accepted | Model's own citation accuracy | Q&A grounded after verification |
+|---|---|---|---|---|---|
+| `qwen2.5:7b`, local, free | 15/15 | 100% | 0 | 78% | 89% |
+| `qwen3.8-27b`, Groq free tier | 15/15 | 100% | 0 | 98% | 95% |
+| `gpt-oss-20b`, Groq free tier | 15/15 | 100% | 0 | 73% | 81% |
+| `gpt-oss-120b`, Groq free tier | 15/15 | 100% | 0 | 64% | 97% |
 
-**Procure-to-pay** (local model; 9 investigations: 3 seeds × 3 questions)
+Every run found every planted cause it was asked about, and no model accepted a decoy. On the
+earlier six-month data the cloud models had lost runs to Groq's free tier and gpt-oss-120b's
+over-caution had cost it 21 points of recall (fixed by decision 2); on the 18-month data the
+evaluation ran as a resumable campaign that waits out the daily quota, so nothing was lost.
+Citation accuracy is measured *before* the verifier corrects anything; with the verifier, 95-97%
+of answers cite a relevant passage, and every model declined 5/5 unanswerable questions.
+
+**Procure-to-pay** (local model; 12 investigations: 3 seeds × 4 questions)
 
 | Model | Runs completed | Mean recall | Decoys accepted | Remedy recommended per cause found | Q&A: model's own citation accuracy |
 |---|---|---|---|---|---|
-| `qwen2.5:7b`, local, free | 9/9 | 100% | 0/9 runs | 17/18 | 86% (100% grounded after verification) |
+| `qwen2.5:7b`, local, free | 12/12 | 100% | 0/12 runs | 23/24 | 79% (100% grounded after verification) |
 
-The safeguards did real work here. The 7B model called a confounded effect "supported" 25
-times across the nine runs (services, MSME suppliers). The confounder rule refuted every one,
-and the coverage and evidence rules added the causes it left out. Three numbers across nine
-executive summaries could not be verified against the facts; they are flagged in the UI and
-listed in the report.
+The safeguards did real work here. The 7B model called a confounded or small-sample effect
+"supported" 48 times across the twelve runs; the confounder and sample-size rules downgraded
+every one, so none was reported as a cause. The three cloud models are being run on this pack now
+(paced by Groq's free daily quota); their results will be added when they finish.
 
-**What-if engine vs the exact counterfactuals:** estimates fall between 0.5 and 1.0 of the true
-breaches avoided. The engine understates by design: it removes waiting time but does not
-re-simulate the calendar. The biggest gap is weekend effects, and that is stated next to every
-estimate.
+Across all 72 runs, 4 numbers in executive summaries could not be verified against the facts
+(two each from the local model and gpt-oss-120b, both on insurance); they are flagged in the UI
+and listed in the report.
+
+**What-if engine vs the exact counterfactuals:** estimates fall between 0.55 and 1.17 of the
+true breaches avoided. The engine mostly understates: it removes waiting time but does not
+re-simulate the calendar, and the biggest gap is weekend effects (the Saturday rota, 0.55),
+stated next to every estimate. Three procure-to-pay actions overstate: catalogue buying by 4%,
+and e-invoicing and scanning paper invoices at the plants by 17% each (both remove the same
+cause).
 
 **Closed loop (demo):** after approving two actions (delegating mid-value approvals and
 retraining one team) and simulating the next month, the breach rate fell from 34% to 19%. Both
@@ -217,15 +227,16 @@ generator with a loader and spend its effort where it usually goes:
 - Results are on **synthetic data** with author-written policies and benchmarks. They show the
   system recovers planted patterns and resists planted decoys, not that it would on a messy
   real event log.
-- **Small samples:** three seeds and three questions per pack and model.
+- **Small samples:** three seeds and four to five questions per pack and model.
 - **Number verification checks numbers, not claims.** Every figure in a summary must appear in
   the computed facts, but a small model can still attach a correct number to the wrong claim
   (one P2P summary called the payment run's 31% breach rate "31% of breaches"). The hypotheses
   and evidence beneath the summary are the record; the summary is a reading of it.
 - The what-if engine **understates** some effects (calendar, and mechanisms beyond waiting
-  time).
-- Accounts are **local** (no single sign-on yet), and the app runs on a laptop: public
-  hosting and GitHub sign-in come with the deployment.
+  time). One consequence: the Saturday rota is valued at 0.55 of its true benefit, so it shows as
+  not paying back, yet 7 of 15 local and 14-15 of 15 cloud insurance runs still recommend it.
+- Accounts are local or GitHub sign-in, with no single sign-on, and the public demo runs on one
+  free 1 GB server with a free model tier, so it is sized for a handful of visitors.
 
 ## Stack
 

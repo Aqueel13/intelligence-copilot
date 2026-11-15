@@ -16,7 +16,7 @@ Quality columns cover completed runs only. *Rate-limited* runs never reached the
 
 | Model | Data | Runs | Completed | Rate-limited | Other failures | Mean recall | All expected causes found | Decoys accepted | Overrides fired | Unverified numbers / run | Mean duration | LLM calls / run | Tokens / run |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `groq:openai/gpt-oss-120b` | 18 months, 18,000 cases | 14 | 14 | 0 | 0 | 100% | 14/14 | 0/8 runs | 81 | 0.14 | 135 s | 10.2 | 21,787 |
+| `groq:openai/gpt-oss-120b` | 18 months, 18,000 cases | 15 | 15 | 0 | 0 | 100% | 15/15 | 0/9 runs | 88 | 0.13 | 137 s | 10.3 | 21,877 |
 | `groq:openai/gpt-oss-20b` | 18 months, 18,000 cases | 15 | 15 | 0 | 0 | 100% | 15/15 | 0/9 runs | 43 | 0.00 | 150 s | 10.8 | 23,345 |
 | `groq:qwen/qwen3.8-27b` | 18 months, 18,000 cases | 15 | 15 | 0 | 0 | 100% | 15/15 | 0/9 runs | 49 | 0.00 | 202 s | 13.5 | 17,165 |
 | `ollama:qwen2.5:7b` | 18 months, 18,000 cases | 15 | 15 | 0 | 0 | 100% | 15/15 | 0/9 runs | 29 | 0.13 | 76 s | 11.2 | 12,727 |
@@ -33,7 +33,7 @@ Quality columns cover completed runs only. *Rate-limited* runs never reached the
 | `health_vs_motor` | `groq:openai/gpt-oss-20b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
 | `health_vs_motor` | `groq:qwen/qwen3.8-27b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
 | `health_vs_motor` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 2/3 |
-| `kolkata_region` | `groq:openai/gpt-oss-120b` | 7: 100%, 42: 100% | 0/2 | 2/2 |
+| `kolkata_region` | `groq:openai/gpt-oss-120b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
 | `kolkata_region` | `groq:openai/gpt-oss-20b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
 | `kolkata_region` | `groq:qwen/qwen3.8-27b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
 | `kolkata_region` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
@@ -50,7 +50,7 @@ Quality columns cover completed runs only. *Rate-limited* runs never reached the
 
 | Model | RC1 Senior approval queue | RC2 Broker documents | RC3 Team B rework | RC4 Friday backlog | RC5 Monsoon surveyor backlog |
 |---|---|---|---|---|---|
-| `groq:openai/gpt-oss-120b` | 6/6 | 6/6 | 5/5 | 3/3 | 6/6 |
+| `groq:openai/gpt-oss-120b` | 6/6 | 6/6 | 6/6 | 3/3 | 6/6 |
 | `groq:openai/gpt-oss-20b` | 6/6 | 6/6 | 6/6 | 3/3 | 6/6 |
 | `groq:qwen/qwen3.8-27b` | 6/6 | 6/6 | 6/6 | 3/3 | 6/6 |
 | `ollama:qwen2.5:7b` | 6/6 | 6/6 | 6/6 | 3/3 | 6/6 |
@@ -61,7 +61,7 @@ How often the deterministic safeguards changed the outcome:
 
 | Model | Hypotheses added by coverage rule | Downgraded (model said supported; confounded or small sample) | Upgraded (code-worded hypothesis, strong evidence) | Findings confirmed by evidence rule | Runs whose summary needed a rewrite | Negative-value actions recommended |
 |---|---|---|---|---|---|---|
-| `groq:openai/gpt-oss-120b` | 86 | 11 | 1 | 69 | 3/14 | 14/14 |
+| `groq:openai/gpt-oss-120b` | 94 | 13 | 1 | 74 | 3/15 | 15/15 |
 | `groq:openai/gpt-oss-20b` | 76 | 7 | 1 | 35 | 1/15 | 15/15 |
 | `groq:qwen/qwen3.8-27b` | 65 | 7 | 6 | 36 | 0/15 | 14/15 |
 | `ollama:qwen2.5:7b` | 41 | 14 | 0 | 15 | 4/15 | 7/15 |
@@ -260,10 +260,9 @@ an investigation uses about 17,000-23,000, so the re-run is a resumable campaign
 once its daily quota is spent. A daily-quota refusal is retried on the next pass, so it is not
 reported as a failure or as a re-run. qwen3.8-27b runs with `LLM_MAX_OUTPUT_TOKENS=1000`:
 Groq's 1,000-tokens-per-minute output cap refused its larger requests outright, which caused
-five of the six failures in the six-month runs. As of 2026-11-15, the insurance pack is
-complete for qwen3.8-27b and gpt-oss-20b, and gpt-oss-120b has one investigation left (the seed
-missing from "By question"). The procure-to-pay pack has only just started on Groq, so its
-section shows the local model only.
+five of the six failures in the six-month runs. The insurance pack is complete for all three
+models (2026-11-15). The procure-to-pay pack started on Groq the same day, so its section shows
+the local model only until it finishes.
 The report is regenerated when the campaign finishes. The earlier six-month Groq runs
 (`2026-11-10-groq`, `2026-11-12-groq-*`) are kept in `evaluation/results/` but no longer feed
 this report.
