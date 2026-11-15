@@ -77,10 +77,10 @@ an investigation uses about 17,000-23,000, so the re-run is a resumable campaign
 once its daily quota is spent. A daily-quota refusal is retried on the next pass, so it is not
 reported as a failure or as a re-run. qwen3.8-27b runs with `LLM_MAX_OUTPUT_TOKENS=1000`:
 Groq's 1,000-tokens-per-minute output cap refused its larger requests outright, which caused
-five of the six failures in the six-month runs. As of 2026-11-15, all three models are
-complete on insurance policy questions and qwen3.8-27b on insurance investigations; each
-gpt-oss model has one insurance investigation left (the seeds missing from "By question"). The
-procure-to-pay pack has not yet been run on Groq, so its section shows the local model only.
+five of the six failures in the six-month runs. As of 2026-11-15, the insurance pack is
+complete for qwen3.8-27b and gpt-oss-20b, and gpt-oss-120b has one investigation left (the seed
+missing from "By question"). The procure-to-pay pack has only just started on Groq, so its
+section shows the local model only.
 The report is regenerated when the campaign finishes. The earlier six-month Groq runs
 (`2026-11-10-groq`, `2026-11-12-groq-*`) are kept in `evaluation/results/` but no longer feed
 this report.
