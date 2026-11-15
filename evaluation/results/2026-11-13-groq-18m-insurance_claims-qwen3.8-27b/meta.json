@@ -1,0 +1,24 @@
+{
+  "started": "2026-11-13T20:30:03",
+  "database": "watchdog_eval_groq_qwen",
+  "domain": "insurance_claims",
+  "models": [
+    "groq:qwen/qwen3.8-27b"
+  ],
+  "seeds": [
+    42,
+    7,
+    1234
+  ],
+  "suites": [
+    "investigation",
+    "qa"
+  ],
+  "dataset": "18 months, 18,000 cases",
+  "passes": [
+    "2026-11-14T10:14:52",
+    "2026-11-14T11:07:12",
+    "2026-11-14T14:44:31"
+  ],
+  "finished": "2026-11-14T14:46:31"
+}

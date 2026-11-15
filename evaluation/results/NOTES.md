@@ -68,11 +68,22 @@ the fixed code:
    wording in those runs' assessor prompts was. Context is now copied at submit time, with a
    regression test.
 
-**Not yet re-run (provider quota).** The cloud runs started at 14:43, a minute before fix 2
-was applied, so the three Groq models' `broker_channel` results predate it; their low "remedy
-recommended" counts on that question reflect the bug, not the models. The local model was
-re-run after the fix (3/3). Re-running the cloud models, and the five runs refused by Groq's
-200,000-tokens-per-day free-tier quota, needs the rolling quota to recover (about 24 hours).
+**Cloud models on the 18-month data (in progress).** The Groq rows above are a re-run on the
+18-month datasets, under every fix listed here (including fix 2, which the first cloud runs on
+`broker_channel` predated) and D57. Groq's free tier allows 200,000 tokens per day per model and
+an investigation uses about 17,000-23,000, so the re-run is a resumable campaign
+(`evaluation/groq_campaign.sh`, a systemd timer every 28 hours, results in
+`2026-11-13-groq-18m-<pack>-<model>`): each pass skips what already succeeded and stops a model
+once its daily quota is spent. A daily-quota refusal is retried on the next pass, so it is not
+reported as a failure or as a re-run. qwen3.8-27b runs with `LLM_MAX_OUTPUT_TOKENS=1000`:
+Groq's 1,000-tokens-per-minute output cap refused its larger requests outright, which caused
+five of the six failures in the six-month runs. As of 2026-11-15, all three models are
+complete on insurance policy questions and qwen3.8-27b on insurance investigations; each
+gpt-oss model has one insurance investigation left (the seeds missing from "By question"). The
+procure-to-pay pack has not yet been run on Groq, so its section shows the local model only.
+The report is regenerated when the campaign finishes. The earlier six-month Groq runs
+(`2026-11-10-groq`, `2026-11-12-groq-*`) are kept in `evaluation/results/` but no longer feed
+this report.
 
 **Limitation found by this evaluation (addressed by 6 above).** The deterministic overrides
 used to only *downgrade* a verdict (e.g. "supported" → "refuted" when a confounder explains the effect).

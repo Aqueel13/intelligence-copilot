@@ -6,6 +6,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from watchdog_backend.domain.pack import available_domains, get_pack
+from watchdog_backend.evaluation.__main__ import _is_daily_quota
 from watchdog_backend.investigation.scoring import evaluation_spec
 
 DEFAULT_DOMAIN = "insurance_claims"  # results recorded before packs were tagged
@@ -28,7 +29,7 @@ LEGACY_DATASET = "6 months (earlier datasets)"
 def _load(dirs: list[Path]) -> tuple[list[dict], list[dict], list[dict]]:
     """Merge runs in the order given: a later run replaces an earlier result for the same
     (domain, suite, model, seed, question). Replaced results are returned so the report lists
-    them."""
+    them, except daily-quota refusals, which a resumed run simply retries."""
     merged: dict[tuple, dict] = {}
     superseded: list[dict] = []
     metas = []
@@ -43,8 +44,10 @@ def _load(dirs: list[Path]) -> tuple[list[dict], list[dict], list[dict]]:
                 r["_run"] = d.name
                 # Runs before 2026-11-12 did not record their dataset: all used six months.
                 r["_dataset"] = meta.get("dataset") or LEGACY_DATASET
-                if _key(r) in merged:
-                    superseded.append(merged[_key(r)])
+                earlier = merged.get(_key(r))
+                # A daily-quota refusal later resumed (--resume) was not re-run after a fix.
+                if earlier and (earlier.get("ok") or not _is_daily_quota(earlier.get("error", ""))):
+                    superseded.append(earlier)
                 merged[_key(r)] = r
     return list(merged.values()), metas, superseded
 
