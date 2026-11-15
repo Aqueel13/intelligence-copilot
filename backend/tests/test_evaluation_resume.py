@@ -22,6 +22,20 @@ def test_daily_quota_recovers_but_request_too_large_does_not():
     assert not _is_daily_quota("NotFoundError: Error code: 404")
 
 
+def test_gateway_keeps_daily_quota_distinct_so_resume_waits_for_it():
+    """QA calls go through the gateway, which replaces the provider's message with a short
+    reason; a daily quota must stay recognisable or --resume gives up on the question."""
+    from watchdog_backend.llm.gateway import LLMCallError
+
+    class RateLimit(Exception):
+        status_code = 429
+
+    daily = LLMCallError("groq:m", RateLimit(TPD))
+    per_minute = LLMCallError("groq:m", RateLimit(OTPM))
+    assert _is_daily_quota(f"LLMCallError: {daily}")
+    assert not _is_daily_quota(f"LLMCallError: {per_minute}")
+
+
 def test_resume_key_ignores_run_details():
     a = {"suite": "investigation", "model": "m", "seed": 7, "question_id": "q", "ok": False}
     b = {**a, "ok": True, "duration_s": 12}

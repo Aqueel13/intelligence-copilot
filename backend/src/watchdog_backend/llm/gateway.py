@@ -45,6 +45,10 @@ def describe_provider_error(exc: BaseException) -> str:
         404: "the model was not found (check the model name)",
         429: "rate limit or free-tier quota reached; try again shortly or switch model",
     }
+    if status == 429 and ("tokens per day" in str(exc) or "(TPD)" in str(exc)):
+        # Kept distinct from per-minute limits: callers (and the evaluation's --resume) wait
+        # for a daily quota instead of retrying.
+        return "daily free-tier token quota reached; it recovers within 24 hours, or switch model"
     if status in hints:
         return hints[status]
     if isinstance(exc, TimeoutError) and "did not finish" in str(exc):

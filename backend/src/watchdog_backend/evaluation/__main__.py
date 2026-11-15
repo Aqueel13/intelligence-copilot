@@ -191,7 +191,7 @@ def _resume_key(r: dict) -> tuple:
 
 def _is_daily_quota(error: str) -> bool:
     """Groq's tokens-per-day limit: it recovers with time, so it is not counted as a failure."""
-    return "tokens per day" in error or "(TPD)" in error
+    return "tokens per day" in error or "(TPD)" in error or "daily free-tier token quota" in error
 
 
 def cmd_report(args: argparse.Namespace) -> None:
