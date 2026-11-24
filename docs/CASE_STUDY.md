@@ -66,7 +66,7 @@ invoices). A switcher in the UI moves between them.
 parameterised aggregates, process mining in SQL, statistics in Python. The LLM picks metrics by
 name and reads results. The executive summary is checked number by number against the facts it
 was given. Unverified numbers trigger one rewrite, and anything still unverified is flagged in
-the UI. In the insurance evaluation, 0 unverified numbers reached a final summary; in procure-to-pay, 3 across 9 summaries, all flagged.
+the UI. On the 18-month evaluation, 4 unverified numbers reached a final summary across 60 insurance runs and 2 across 48 procure-to-pay runs, all flagged.
 
 **2. Safeguards in both directions, without re-judging the model's words.** A segment effect
 explained by a confounder cannot be "supported", whatever the model says. That stops decoys.
