@@ -1,6 +1,6 @@
 # Evaluation report
 
-Generated from 15 run(s) over 2 domain pack(s): `2026-11-10T14:23:19` (insurance_claims), `2026-11-10T15:54:20` (insurance_claims), `2026-11-10T19:27:50` (insurance_claims), `2026-11-10T20:28:49` (procure_to_pay), `2026-11-12T13:01:35` (insurance_claims), `2026-11-12T13:40:47` (insurance_claims), `2026-11-12T15:01:44` (insurance_claims), `2026-11-12T15:41:55` (insurance_claims), `2026-11-12T13:18:51` (procure_to_pay), `2026-11-12T13:45:42` (procure_to_pay), `2026-11-12T15:20:06` (procure_to_pay), `2026-11-12T15:49:01` (procure_to_pay), `2026-11-13T20:30:03` (insurance_claims), `2026-11-13T20:30:03` (insurance_claims), `2026-11-13T20:30:03` (insurance_claims). Models: `groq:openai/gpt-oss-120b`, `groq:openai/gpt-oss-20b`, `groq:qwen/qwen3.8-27b`, `ollama:qwen2.5:7b`.
+Generated from 18 run(s) over 2 domain pack(s): `2026-11-10T14:23:19` (insurance_claims), `2026-11-10T15:54:20` (insurance_claims), `2026-11-10T19:27:50` (insurance_claims), `2026-11-10T20:28:49` (procure_to_pay), `2026-11-12T13:01:35` (insurance_claims), `2026-11-12T13:40:47` (insurance_claims), `2026-11-12T15:01:44` (insurance_claims), `2026-11-12T15:41:55` (insurance_claims), `2026-11-12T13:18:51` (procure_to_pay), `2026-11-12T13:45:42` (procure_to_pay), `2026-11-12T15:20:06` (procure_to_pay), `2026-11-12T15:49:01` (procure_to_pay), `2026-11-13T20:30:03` (insurance_claims), `2026-11-13T20:30:03` (insurance_claims), `2026-11-13T20:30:03` (insurance_claims), `2026-11-15T11:16:28` (procure_to_pay), `2026-11-15T11:14:52` (procure_to_pay), `2026-11-14T14:46:32` (procure_to_pay). Models: `groq:openai/gpt-oss-120b`, `groq:openai/gpt-oss-20b`, `groq:qwen/qwen3.8-27b`, `ollama:qwen2.5:7b`.
 
 All results are measured, not targets. Failed runs are reported, not dropped. Every investigation is scored against the generator's planted ground truth, declared per pack in `domain_packs/<pack>/evaluation/investigations.yaml`: a planted cause counts as found only if a hypothesis that targets it is *supported*; a decoy counts as accepted if a supported hypothesis rests only on it. Both packs run on the same engine code: only configuration and the synthetic-data generator differ.
 
@@ -108,7 +108,7 @@ A ratio below 1 means the what-if understates the benefit (it removes waiting ti
 
 ## Procure-to-Pay (invoice-to-pay, manufacturing)
 
-Pack `procure_to_pay`. Models: `ollama:qwen2.5:7b`. Seeds: [7, 42, 1234].
+Pack `procure_to_pay`. Models: `groq:openai/gpt-oss-120b`, `groq:openai/gpt-oss-20b`, `groq:qwen/qwen3.8-27b`, `ollama:qwen2.5:7b`. Seeds: [7, 42, 1234].
 
 ### 1. Investigations
 
@@ -116,21 +116,39 @@ Quality columns cover completed runs only. *Rate-limited* runs never reached the
 
 | Model | Data | Runs | Completed | Rate-limited | Other failures | Mean recall | All expected causes found | Decoys accepted | Overrides fired | Unverified numbers / run | Mean duration | LLM calls / run | Tokens / run |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `groq:openai/gpt-oss-120b` | 18 months, 18,000 cases | 12 | 12 | 0 | 0 | 100% | 12/12 | 0/12 runs | 78 | 0.17 | 197 s | 14.2 | 31,618 |
+| `groq:openai/gpt-oss-20b` | 18 months, 18,000 cases | 12 | 12 | 0 | 0 | 100% | 12/12 | 0/12 runs | 68 | 0.00 | 168 s | 12.9 | 27,657 |
+| `groq:qwen/qwen3.8-27b` | 18 months, 18,000 cases | 12 | 12 | 0 | 0 | 100% | 12/12 | 0/12 runs | 53 | 0.00 | 202 s | 16.7 | 23,451 |
 | `ollama:qwen2.5:7b` | 18 months, 18,000 cases | 12 | 12 | 0 | 0 | 100% | 12/12 | 0/12 runs | 52 | 0.00 | 103 s | 14.9 | 18,752 |
 
 #### By question
 
 | Question | Model | Recall by seed | Decoys accepted | Remedy recommended for each cause found |
 |---|---|---|---|---|
+| `msme_late` | `groq:openai/gpt-oss-120b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
+| `msme_late` | `groq:openai/gpt-oss-20b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 2/3 |
+| `msme_late` | `groq:qwen/qwen3.8-27b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
 | `msme_late` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
+| `p2p_root_causes` | `groq:openai/gpt-oss-120b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 15/15 |
+| `p2p_root_causes` | `groq:openai/gpt-oss-20b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 14/15 |
+| `p2p_root_causes` | `groq:qwen/qwen3.8-27b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 13/15 |
 | `p2p_root_causes` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 14/15 |
+| `sanand_late` | `groq:openai/gpt-oss-120b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
+| `sanand_late` | `groq:openai/gpt-oss-20b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
+| `sanand_late` | `groq:qwen/qwen3.8-27b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
 | `sanand_late` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
+| `services_slow` | `groq:openai/gpt-oss-120b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
+| `services_slow` | `groq:openai/gpt-oss-20b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
+| `services_slow` | `groq:qwen/qwen3.8-27b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
 | `services_slow` | `ollama:qwen2.5:7b` | 7: 100%, 42: 100%, 1234: 100% | 0/3 | 3/3 |
 
 #### Planted causes found (all questions that expect them)
 
 | Model | RC1 Chakan goods receipts | RC2 Free-text PO price exceptions | RC3 BPO capture errors | RC4 Weekly payment run | RC5 Paper invoices wait for capture |
 |---|---|---|---|---|---|
+| `groq:openai/gpt-oss-120b` | 3/3 | 6/6 | 6/6 | 3/3 | 6/6 |
+| `groq:openai/gpt-oss-20b` | 3/3 | 6/6 | 6/6 | 3/3 | 6/6 |
+| `groq:qwen/qwen3.8-27b` | 3/3 | 6/6 | 6/6 | 3/3 | 6/6 |
 | `ollama:qwen2.5:7b` | 3/3 | 6/6 | 6/6 | 3/3 | 6/6 |
 
 #### Safeguards at work
@@ -139,6 +157,9 @@ How often the deterministic safeguards changed the outcome:
 
 | Model | Hypotheses added by coverage rule | Downgraded (model said supported; confounded or small sample) | Upgraded (code-worded hypothesis, strong evidence) | Findings confirmed by evidence rule | Runs whose summary needed a rewrite | Negative-value actions recommended |
 |---|---|---|---|---|---|---|
+| `groq:openai/gpt-oss-120b` | 104 | 33 | 0 | 45 | 5/12 | 0/12 |
+| `groq:openai/gpt-oss-20b` | 92 | 30 | 0 | 38 | 0/12 | 0/12 |
+| `groq:qwen/qwen3.8-27b` | 89 | 11 | 0 | 42 | 0/12 | 0/12 |
 | `ollama:qwen2.5:7b` | 73 | 48 | 0 | 4 | 2/12 | 0/12 |
 
 Downgrades stop decoys (a model calling a confounded effect a cause). Upgrades and confirmed findings stop over-caution: the evidence rule only ever adds or upgrades hypotheses worded by code from evidence that is significant, large enough, not a small sample and not explained by any confounder; a sentence the model wrote is never re-judged. Runs made before the upgrade rules existed could only downgrade. *Negative-value actions recommended* counts runs that recommended an action whose estimated net value is negative; the recommender may do so only when no positive action addresses a supported cause, and the UI marks it "Not cost-effective".
@@ -152,6 +173,9 @@ None.
 
 | Model | Answerable questions | Answered (not refused) | Cited a relevant passage | Grounded after verification | Model's own citation accuracy | Unanswerable correctly declined | Errors | Mean generation |
 |---|---|---|---|---|---|---|---|---|
+| `groq:openai/gpt-oss-120b` | 34 | 97% | 97% | 85% | 51% | 5/5 | 0 | 6.1 s |
+| `groq:openai/gpt-oss-20b` | 34 | 100% | 100% | 91% | 76% | 5/5 | 0 | 6.2 s |
+| `groq:qwen/qwen3.8-27b` | 34 | 100% | 100% | 94% | 97% | 5/5 | 0 | 4.3 s |
 | `ollama:qwen2.5:7b` | 34 | 100% | 100% | 100% | 79% | 5/5 | 0 | 1.6 s |
 
 *Model's own citation accuracy* = share of answer sentences whose citation the model got right before the verifier corrected anything (decision D20).
@@ -251,21 +275,23 @@ the fixed code:
    wording in those runs' assessor prompts was. Context is now copied at submit time, with a
    regression test.
 
-**Cloud models on the 18-month data (in progress).** The Groq rows above are a re-run on the
-18-month datasets, under every fix listed here (including fix 2, which the first cloud runs on
+**Cloud models on the 18-month data.** The Groq rows above are a re-run on the 18-month
+datasets, under every fix listed here (including fix 2, which the first cloud runs on
 `broker_channel` predated) and D57. Groq's free tier allows 200,000 tokens per day per model and
-an investigation uses about 17,000-23,000, so the re-run is a resumable campaign
+an investigation uses about 17,000-32,000, so the re-run was a resumable campaign
 (`evaluation/groq_campaign.sh`, a systemd timer every 28 hours, results in
-`2026-11-13-groq-18m-<pack>-<model>`): each pass skips what already succeeded and stops a model
-once its daily quota is spent. A daily-quota refusal is retried on the next pass, so it is not
-reported as a failure or as a re-run. qwen3.8-27b runs with `LLM_MAX_OUTPUT_TOKENS=1000`:
+`2026-11-13-groq-18m-<pack>-<model>`): each pass skipped what already succeeded and stopped a
+model once its daily quota was spent. A daily-quota refusal is retried on the next pass, so it is
+not reported as a failure or as a re-run. qwen3.8-27b runs with `LLM_MAX_OUTPUT_TOKENS=1000`:
 Groq's 1,000-tokens-per-minute output cap refused its larger requests outright, which caused
-five of the six failures in the six-month runs. The insurance pack is complete for all three
-models (2026-11-15). The procure-to-pay pack started on Groq the same day, so its section shows
-the local model only until it finishes.
-The report is regenerated when the campaign finishes. The earlier six-month Groq runs
-(`2026-11-10-groq`, `2026-11-12-groq-*`) are kept in `evaluation/results/` but no longer feed
-this report.
+five of the six failures in the six-month runs. The campaign ran from 2026-11-13 to 2026-11-24:
+insurance finished on 2026-11-15, procure-to-pay on 2026-11-24. Two gpt-oss-20b procure-to-pay
+investigations (seed 42, `services_slow` and `msme_late`) exhausted their three attempts on
+Groq's 8,000-tokens-per-minute limit, not the daily quota; they were resumed by hand with more
+provider retries per call (`--max-retries 30`) and both completed. Their earlier rate-limited
+attempts are listed below as re-runs. Every cloud model completed every investigation on both
+packs. The earlier six-month Groq runs (`2026-11-10-groq`, `2026-11-12-groq-*`) are kept in
+`evaluation/results/` but no longer feed this report.
 
 **Limitation found by this evaluation (addressed by 6 above).** The deterministic overrides
 used to only *downgrade* a verdict (e.g. "supported" → "refuted" when a confounder explains the effect).
@@ -276,7 +302,7 @@ confounder checks showed the effect persisting, and left the correct claim-value
 "inconclusive" in one health-vs-motor run. Rules A and B now surface such causes as
 separate, code-worded findings; the model's own sentences are still never re-judged.
 
-68 earlier result(s) were re-run after a fix and replaced:
+87 earlier result(s) were re-run after a fix and replaced:
 
 | Pack | Model | Seed | Question | Earlier result |
 |---|---|---|---|---|
@@ -325,6 +351,25 @@ separate, code-worded findings; the model's own sentences are still never re-jud
 | insurance_claims | `ollama:qwen2.5:7b` | 1234 | `broker_channel` | failed: ConnectError: [Errno 111] Connection refused |
 | insurance_claims | `ollama:qwen2.5:7b` | 1234 | `monsoon_motor` | failed: ConnectError: [Errno 111] Connection refused |
 | insurance_claims | `ollama:qwen2.5:7b` | 1234 | `kolkata_region` | failed: ConnectError: [Errno 111] Connection refused |
+| procure_to_pay | `groq:openai/gpt-oss-120b` | 42 | `services_slow` | failed: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for  |
+| procure_to_pay | `groq:openai/gpt-oss-120b` | 42 | `services_slow` | failed: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for  |
+| procure_to_pay | `groq:openai/gpt-oss-120b` | 42 | `sanand_late` | failed: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for  |
+| procure_to_pay | `groq:openai/gpt-oss-120b` | 1234 | `services_slow` | failed: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for  |
+| procure_to_pay | `groq:openai/gpt-oss-120b` | 1234 | `services_slow` | failed: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for  |
+| procure_to_pay | `groq:openai/gpt-oss-20b` | 42 | `services_slow` | failed: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for  |
+| procure_to_pay | `groq:openai/gpt-oss-20b` | 42 | `msme_late` | failed: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for  |
+| procure_to_pay | `groq:openai/gpt-oss-20b` | 42 | `sanand_late` | failed: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for  |
+| procure_to_pay | `groq:openai/gpt-oss-20b` | 42 | `services_slow` | failed: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for  |
+| procure_to_pay | `groq:openai/gpt-oss-20b` | 42 | `msme_late` | failed: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for  |
+| procure_to_pay | `groq:openai/gpt-oss-20b` | 42 | `services_slow` | failed: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for  |
+| procure_to_pay | `groq:openai/gpt-oss-20b` | 42 | `msme_late` | failed: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for  |
+| procure_to_pay | `groq:openai/gpt-oss-20b` | 42 | `services_slow` | failed: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for  |
+| procure_to_pay | `groq:openai/gpt-oss-20b` | 42 | `msme_late` | failed: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for  |
+| procure_to_pay | `groq:openai/gpt-oss-20b` | 1234 | `services_slow` | failed: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for  |
+| procure_to_pay | `groq:openai/gpt-oss-20b` | 1234 | `services_slow` | failed: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for  |
+| procure_to_pay | `groq:qwen/qwen3.8-27b` | 7 | `services_slow` | failed: TimeoutError: model did not finish within 180 s |
+| procure_to_pay | `groq:qwen/qwen3.8-27b` | 7 | `services_slow` | failed: TimeoutError: model did not finish within 180 s |
+| procure_to_pay | `groq:qwen/qwen3.8-27b` | 1234 | `p2p_root_causes` | failed: RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for  |
 | procure_to_pay | `ollama:qwen2.5:7b` | 7 | `p2p_root_causes` | recall 100%, remedy recommended 4/4 |
 | procure_to_pay | `ollama:qwen2.5:7b` | 7 | `services_slow` | recall 100%, remedy recommended 1/1 |
 | procure_to_pay | `ollama:qwen2.5:7b` | 7 | `msme_late` | recall 100%, remedy recommended 1/1 |

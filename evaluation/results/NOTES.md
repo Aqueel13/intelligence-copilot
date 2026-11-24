@@ -68,21 +68,23 @@ the fixed code:
    wording in those runs' assessor prompts was. Context is now copied at submit time, with a
    regression test.
 
-**Cloud models on the 18-month data (in progress).** The Groq rows above are a re-run on the
-18-month datasets, under every fix listed here (including fix 2, which the first cloud runs on
+**Cloud models on the 18-month data.** The Groq rows above are a re-run on the 18-month
+datasets, under every fix listed here (including fix 2, which the first cloud runs on
 `broker_channel` predated) and D57. Groq's free tier allows 200,000 tokens per day per model and
-an investigation uses about 17,000-23,000, so the re-run is a resumable campaign
+an investigation uses about 17,000-32,000, so the re-run was a resumable campaign
 (`evaluation/groq_campaign.sh`, a systemd timer every 28 hours, results in
-`2026-11-13-groq-18m-<pack>-<model>`): each pass skips what already succeeded and stops a model
-once its daily quota is spent. A daily-quota refusal is retried on the next pass, so it is not
-reported as a failure or as a re-run. qwen3.8-27b runs with `LLM_MAX_OUTPUT_TOKENS=1000`:
+`2026-11-13-groq-18m-<pack>-<model>`): each pass skipped what already succeeded and stopped a
+model once its daily quota was spent. A daily-quota refusal is retried on the next pass, so it is
+not reported as a failure or as a re-run. qwen3.8-27b runs with `LLM_MAX_OUTPUT_TOKENS=1000`:
 Groq's 1,000-tokens-per-minute output cap refused its larger requests outright, which caused
-five of the six failures in the six-month runs. The insurance pack is complete for all three
-models (2026-11-15). The procure-to-pay pack started on Groq the same day, so its section shows
-the local model only until it finishes.
-The report is regenerated when the campaign finishes. The earlier six-month Groq runs
-(`2026-11-10-groq`, `2026-11-12-groq-*`) are kept in `evaluation/results/` but no longer feed
-this report.
+five of the six failures in the six-month runs. The campaign ran from 2026-11-13 to 2026-11-24:
+insurance finished on 2026-11-15, procure-to-pay on 2026-11-24. Two gpt-oss-20b procure-to-pay
+investigations (seed 42, `services_slow` and `msme_late`) exhausted their three attempts on
+Groq's 8,000-tokens-per-minute limit, not the daily quota; they were resumed by hand with more
+provider retries per call (`--max-retries 30`) and both completed. Their earlier rate-limited
+attempts are listed below as re-runs. Every cloud model completed every investigation on both
+packs. The earlier six-month Groq runs (`2026-11-10-groq`, `2026-11-12-groq-*`) are kept in
+`evaluation/results/` but no longer feed this report.
 
 **Limitation found by this evaluation (addressed by 6 above).** The deterministic overrides
 used to only *downgrade* a verdict (e.g. "supported" → "refuted" when a confounder explains the effect).

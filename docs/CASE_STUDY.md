@@ -132,19 +132,21 @@ evaluation ran as a resumable campaign that waits out the daily quota, so nothin
 Citation accuracy is measured *before* the verifier corrects anything; with the verifier, 95-97%
 of answers cite a relevant passage, and every model declined 5/5 unanswerable questions.
 
-**Procure-to-pay** (local model; 12 investigations: 3 seeds × 4 questions)
+**Procure-to-pay** (48 scored investigations: 4 models × 3 seeds × 4 questions)
 
 | Model | Runs completed | Mean recall | Decoys accepted | Remedy recommended per cause found | Q&A: model's own citation accuracy |
 |---|---|---|---|---|---|
 | `qwen2.5:7b`, local, free | 12/12 | 100% | 0/12 runs | 23/24 | 79% (100% grounded after verification) |
+| `qwen3.8-27b`, Groq free tier | 12/12 | 100% | 0/12 runs | 22/24 | 97% (94% grounded after verification) |
+| `gpt-oss-20b`, Groq free tier | 12/12 | 100% | 0/12 runs | 22/24 | 76% (91% grounded after verification) |
+| `gpt-oss-120b`, Groq free tier | 12/12 | 100% | 0/12 runs | 24/24 | 51% (85% grounded after verification) |
 
 The safeguards did real work here. The 7B model called a confounded or small-sample effect
-"supported" 48 times across the twelve runs; the confounder and sample-size rules downgraded
-every one, so none was reported as a cause. The three cloud models are being run on this pack now
-(paced by Groq's free daily quota); their results will be added when they finish.
+"supported" 48 times across the twelve runs, and the cloud models 11 to 33 times each; the
+confounder and sample-size rules downgraded every one, so none was reported as a cause.
 
-Across all 72 runs, 4 numbers in executive summaries could not be verified against the facts
-(two each from the local model and gpt-oss-120b, both on insurance); they are flagged in the UI
+Across all 108 runs, 6 numbers in executive summaries could not be verified against the facts
+(two from the local model on insurance, two from gpt-oss-120b on each pack); they are flagged in the UI
 and listed in the report.
 
 **What-if engine vs the exact counterfactuals:** estimates fall between 0.55 and 1.17 of the
